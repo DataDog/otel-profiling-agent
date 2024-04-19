@@ -134,6 +134,7 @@ func (r *OTLPReporter) ReportFramesForTrace(trace *libpf.Trace) {
 
 // ReportCountForTrace accepts a hash of a trace with a corresponding count and
 // caches this information.
+// nolint: dupl
 func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
 	count uint16, comm, podName, containerName string) {
 	if v, exists := r.traces.Peek(traceHash); exists {
