@@ -70,7 +70,10 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp = "Listening address (e.g. localhost:6060) to serve pprof information."
+	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
+	reporterIntervalHelp = "Set the reporter's interval in seconds."
+	saveCPUProfileHelp   = "Save CPU pprof profile to `cpu.pprof`"
+	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
 )
 
 // Variables for command line arguments
@@ -94,6 +97,7 @@ var (
 	argProbabilisticThreshold uint
 	argProbabilisticInterval  time.Duration
 	argPprofAddr              string
+	argSaveCPUProfile         bool
 
 	// "internal" flag variables.
 	// Flag variables that are configured in "internal" builds will have to be assigned
@@ -150,6 +154,12 @@ func parseArgs() error {
 		defaultProbabilisticThreshold, probabilisticThresholdHelp)
 	fs.DurationVar(&argProbabilisticInterval, "probabilistic-interval",
 		defaultProbabilisticInterval, probabilisticIntervalHelp)
+	fs.DurationVar(&argReporterInterval, "reporter-interval", defaultArgReporterInterval,
+		reporterIntervalHelp)
+	fs.BoolVar(&argSaveCPUProfile, "save-cpuprofile", false,
+		saveCPUProfileHelp)
+	fs.IntVar(&argSamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
+		samplesPerSecondHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
