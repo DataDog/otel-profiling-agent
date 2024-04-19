@@ -289,7 +289,8 @@ func createKubernetesClient(ctx context.Context, instance *handler) error {
 
 	instance.nodeName, err = getNodeName()
 	if err != nil {
-		return fmt.Errorf("failed to get kubernetes node name; %v", err)
+		log.Errorf("failed to get kubernetes node name; %v", err)
+		instance.nodeName = "UNKNOWN"
 	}
 
 	instance.containerMetadataCache, err = getContainerMetadataCache(ctx, instance)
@@ -523,7 +524,9 @@ func (h *handler) getKubernetesPodMetadata(pidContainerID string) (
 		FieldSelector: "spec.nodeName=" + h.nodeName,
 	})
 	if err != nil {
-		return ContainerMetadata{}, fmt.Errorf("failed to retrieve kubernetes pods, %v", err)
+		containerMetadata := ContainerMetadata{}
+		h.containerMetadataCache.Add(pidContainerID, containerMetadata)
+		return containerMetadata, fmt.Errorf("failed to retrieve kubernetes pods, %v", err)
 	}
 
 	for j := range pods.Items {
@@ -551,7 +554,9 @@ func (h *handler) getKubernetesPodMetadata(pidContainerID string) (
 		}
 	}
 
-	return ContainerMetadata{},
+	containerMetadata := ContainerMetadata{}
+	h.containerMetadataCache.Add(pidContainerID, containerMetadata)
+	return containerMetadata,
 		fmt.Errorf("failed to find matching kubernetes pod/container metadata for "+
 			"containerID '%v' in %d pods", pidContainerID, len(pods.Items))
 }
