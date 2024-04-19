@@ -33,6 +33,7 @@ const (
 	defaultProbabilisticThreshold    = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval     = 1 * time.Minute
 	defaultArgSendErrorFrames        = false
+	defaultArgCollAgentAddr          = "http://localhost:8126/profiling/v1/input"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -123,7 +124,7 @@ func parseArgs() error {
 
 	fs.StringVar(&argCacheDirectory, "cache-directory", config.CacheDirectory(),
 		cacheDirectoryHelp)
-	fs.StringVar(&argCollAgentAddr, "collection-agent", "",
+	fs.StringVar(&argCollAgentAddr, "collection-agent", defaultArgCollAgentAddr,
 		collAgentAddrHelp)
 	fs.StringVar(&argConfigFile, "config", "/etc/otel/profiling-agent/agent.conf",
 		configFileHelp)
