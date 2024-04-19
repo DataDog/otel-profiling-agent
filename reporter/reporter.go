@@ -64,6 +64,10 @@ type Config struct {
 	// Number of connection attempts to the collector after which we give up retrying
 	MaxGRPCRetries uint32
 
+	SamplesPerSecond uint16
+
+	SaveCPUProfile bool
+
 	Times Times
 }
 
