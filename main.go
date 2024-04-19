@@ -302,7 +302,7 @@ func mainWithExitCode() exitCode {
 	// Network operations to CA start here
 	var rep reporter.Reporter
 	// Connect to the collection agent
-	rep, err = reporter.Start(mainCtx, &reporter.Config{
+	rep, err = reporter.StartDatadog(mainCtx, &reporter.Config{
 		CollAgentAddr:           argCollAgentAddr,
 		MaxRPCMsgSize:           33554432, // 32 MiB
 		ExecMetadataMaxQueue:    2048,
