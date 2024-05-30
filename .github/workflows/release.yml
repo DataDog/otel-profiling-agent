@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/build.yml
+
+  release:
+    env:
+      RELEASE_VERSION: ${{ github.ref_name }}
+    needs: build
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Create assets
+        run: |
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-aarch64.tar.gz -C agent-aarch64 .
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-x86_64.tar.gz -C agent-x86_64 .
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "otel-profiling-agent-v*.tar.gz"
+          allowUpdates: true
+          omitBody:  true
+          draft: true
+          tag: ${{ env.RELEASE_VERSION }}
