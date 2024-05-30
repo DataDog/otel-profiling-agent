@@ -1,0 +1,296 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+  workflow_call:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        go: ["stable"]
+    steps:
+    - name: Install dependencies
+      run: sudo apt-get install -y llvm clang dwz cmake curl unzip
+    - name: Install Zydis
+      shell: bash
+      run: |
+        cd /tmp
+        git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+        cd zydis
+        rm -rf build
+        mkdir build
+        cd build
+        cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+        make -j$(nproc)
+        sudo make install
+        cd zycore
+        sudo make install
+    - name: Set up Go ${{matrix.go}}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{matrix.go}}
+        check-latest: true
+        cache-dependency-path: |
+          go.sum
+      id: go
+    - name: Install gRPC dependencies
+      env:
+        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
+        PB_FILE: "protoc-24.4-linux-x86_64.zip"
+        INSTALL_DIR: "/usr/local"
+      run: |
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+        curl -LO "$PB_URL/$PB_FILE"
+        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
+        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
+        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
+        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
+        rm "$PB_FILE"
+    - name: Check out
+      uses: actions/checkout@v4
+    - name: Linter
+      run: |
+        go version
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
+        make lint
+
+  test:
+    name: Test
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        go: ["stable"]
+        # Tests fail on arm64, so we only run them on x86_64
+        os: ["ubuntu-24.04"]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc make llvm clang-16 dwz cmake curl unzip
+    - name: Install Zydis
+      shell: bash
+      run: |
+        cd /tmp
+        git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+        cd zydis
+        rm -rf build
+        mkdir build
+        cd build
+        cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+        make -j$(nproc)
+        sudo make install
+        cd zycore
+        sudo make install
+    - name: Set up Go ${{matrix.go}}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{matrix.go}}
+        check-latest: true
+        cache-dependency-path: |
+          go.sum
+      id: go
+    - name: Install gRPC dependencies
+      env:
+        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
+        PB_FILE: "protoc-24.4-linux-%arch%.zip"
+        INSTALL_DIR: "/usr/local"
+      run: |
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+        ARCH=$(uname -m | sed 's/aarch64/aarch_64/')
+        PB_FILE=$(echo $PB_FILE | sed "s/%arch%/$ARCH/g")
+        curl -LO "$PB_URL/$PB_FILE"
+        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
+        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
+        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
+        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
+        rm "$PB_FILE"
+    - name: Check out
+      uses: actions/checkout@v4
+    - name: Build
+      run: |
+        echo $PATH
+        make
+    - name: Tests
+      run: |
+        make test
+
+  build-integration-test-binaries:
+    name: Build integration test binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get install -y llvm clang-16 dwz cmake curl unzip
+      - name: Install Zydis
+        shell: bash
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+          cd zydis
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+          make -j$(nproc)
+          sudo make install
+          cd zycore
+          sudo make install
+      - name: Prepare integration test binaries for qemu tests
+        run: |
+          make integration-test-binaries
+      - name: Upload integration test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-binaries
+          path: support/*.test
+
+  integration-tests:
+    name: Integration tests (kernel v${{ matrix.kernel-version }})
+    runs-on: ubuntu-24.04
+    needs: build-integration-test-binaries
+    strategy:
+      matrix:
+        kernel-version: [ "4.19.314", "5.4.276", "5.10.217", "5.15.159", "6.1.91", "6.6.31", "6.8.10", "6.9.1" ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install qemu-system-x86
+          go install github.com/florianl/bluebox@v0.0.1
+          sudo mv ~/go/bin/bluebox /usr/local/bin/.
+      - name: Fetch integration test binaries
+        uses: actions/download-artifact@v4
+        with: { name: integration-test-binaries }
+      - name: Fetch precompiled kernels
+        run: |
+          install -d ci-kernels
+          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel-version }}" | docker buildx build --quiet --pull --output="ci-kernels" -
+          mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel-version }}/
+      - name: Test on kernel ${{ matrix.kernel-version }}
+        run: |
+          chmod a+rx *.test
+          support/run-tests.sh ${{ matrix.kernel-version }}
+
+  build:
+    name: Build
+    needs: [ test, lint, integration-tests ]
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        go: ["stable"]
+        os: ["arm-4core-linux-ubuntu24.04", "ubuntu-24.04"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc make llvm clang-16 dwz cmake curl unzip
+      - name: Install Zydis
+        shell: bash
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+          cd zydis
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+          make -j$(nproc)
+          sudo make install
+          cd zycore
+          sudo make install
+      - name: Set up Go ${{matrix.go}}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{matrix.go}}
+          check-latest: true
+          cache-dependency-path: |
+            go.sum
+        id: go
+      - name: Install gRPC dependencies
+        env:
+          PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
+          PB_FILE: "protoc-24.4-linux-%arch%.zip"
+          INSTALL_DIR: "/usr/local"
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          ARCH=$(uname -m | sed 's/aarch64/aarch_64/')
+          PB_FILE=$(echo $PB_FILE | sed "s/%arch%/$ARCH/g")
+          curl -LO "$PB_URL/$PB_FILE"
+          sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
+          sudo chmod +xr "$INSTALL_DIR/bin/protoc"
+          sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
+          sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
+          rm "$PB_FILE"
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: Build
+        run: |
+          echo $PATH
+          make
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.os == 'arm-4core-linux-ubuntu24.04' && 'aarch64' || 'x86_64' }}
+          path: otel-profiling-agent
+
+  publish:
+    env:
+      RELEASE_VERSION: dev
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    name: Publish pre-release
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Create assets
+        run: |
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-aarch64.tar.gz -C agent-aarch64 .
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-x86_64.tar.gz -C agent-x86_64 .
+      - name: Create or move previous dev tag
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ env.RELEASE_VERSION }}',
+              sha: context.sha
+            }).catch(err => {
+              if (err.status !== 422) throw err;
+              github.rest.git.updateRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/${{ env.RELEASE_VERSION }}',
+                sha: context.sha
+              })
+            });
+      - name: Create pre-release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "otel-profiling-agent-dev-*.tar.gz"
+          allowUpdates: true
+          removeArtifacts: true
+          omitBody:  true
+          omitDraftDuringUpdate: true
+          prerelease: true
+          draft: false
+          tag: ${{ env.RELEASE_VERSION }}
