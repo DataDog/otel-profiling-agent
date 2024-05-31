@@ -9,6 +9,7 @@ package reporter
 import (
 	"bytes"
 	"context"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ import (
 
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*DatadogReporter)(nil)
+
+const profilingEndPoint = "/profiling/v1/input"
 
 // DatadogReporter receives and transforms information to be OTLP/profiles compliant.
 type DatadogReporter struct {
@@ -333,8 +336,12 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 		tags = append(tags, "service:otel-profiling-agent")
 	}
 	log.Infof("tags: %v", tags)
-	err := uploadProfiles(ctx, []profileData{{name: "cpu.pprof", data: b.Bytes()}},
-		time.Unix(int64(startTS), 0), time.Unix(int64(endTS), 0), r.agentAddr, tags)
+	profilingURL, err := url.JoinPath(r.agentAddr, profilingEndPoint)
+	if err != nil {
+		return err
+	}
+	err = uploadProfiles(ctx, []profileData{{name: "cpu.pprof", data: b.Bytes()}},
+		time.Unix(int64(startTS), 0), time.Unix(int64(endTS), 0), profilingURL, tags)
 
 	return err
 }
