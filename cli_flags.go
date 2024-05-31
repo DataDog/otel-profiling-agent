@@ -30,7 +30,7 @@ const (
 	defaultProbabilisticThreshold    = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval     = 1 * time.Minute
 	defaultArgSendErrorFrames        = false
-	defaultArgCollAgentAddr          = "http://localhost:8126/profiling/v1/input"
+	defaultArgCollAgentAddr          = "http://localhost:8126"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
