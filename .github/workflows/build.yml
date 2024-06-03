@@ -130,3 +130,26 @@ jobs:
         name: agent-${{ matrix.os == 'arm-4core-linux' && 'aarch64' || 'x86_64' }}
         path: otel-profiling-agent
 
+  publish:
+    env:
+      RELEASE_VERSION: dev
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    name: Publish pre-release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Create assets
+        run: |
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-aarch64.tar.gz -C agent-aarch64 .
+          tar czf otel-profiling-agent-${RELEASE_VERSION}-x86_64.tar.gz -C agent-x86_64 .
+      - name: Create pre-release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "otel-profiling-agent-dev-*.tar.gz"
+          allowUpdates: true
+          removeArtifacts: true
+          omitBody:  true
+          prerelease: true
+          tag: ${{ env.RELEASE_VERSION }}
