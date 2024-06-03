@@ -431,12 +431,16 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
 					var fileName = unkownStr
+					var buildID = trace.files[i].StringNoQuotes()
 					if exists {
 						fileName = executionInfo.fileName
+						if executionInfo.buildID != "" {
+							buildID = executionInfo.buildID
+						}
 					}
 
 					tmpMapping := createPprofMapping(profile, uint64(trace.linenos[i]), fileName,
-						trace.files[i].StringNoQuotes())
+						buildID)
 					fileIDtoMapping[trace.files[i]] = tmpMapping
 					loc.Mapping = tmpMapping
 				}
