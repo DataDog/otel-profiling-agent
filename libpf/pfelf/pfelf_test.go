@@ -53,6 +53,22 @@ func TestGetBuildID(t *testing.T) {
 	}
 }
 
+func TestGetGoBuildID(t *testing.T) {
+	elfFile := getELF("testdata/go-buildid", t)
+	defer elfFile.Close()
+
+	buildID, err := pfelf.GetGoBuildID(elfFile)
+	if err != nil {
+		t.Fatalf("GetGoBuildID failed with error: %s", err)
+	}
+
+	// nolint:lll
+	if buildID !=
+		"tUhrGOwxi48kXlLhYlY3/WlmPekR2qonrFvofssLt/8beXJbt0rDaHhn3I6x8D/IA6Zd8Qc8Rsh_bFKoPVn" {
+		t.Fatalf("Invalid build-id: %s", buildID)
+	}
+}
+
 func TestGetDebugLink(t *testing.T) {
 	debugExePath, err := testsupport.WriteTestExecutable1()
 	if err != nil {

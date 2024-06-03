@@ -313,6 +313,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 
 	buildID, _ := ef.GetBuildID()
+
+	if buildID == "" {
+		// If the buildID is empty, try to get Go buildID.
+		buildID, _ = ef.GetGoBuildID()
+	}
+
 	pm.reporter.ExecutableMetadata(context.TODO(), fileID, baseName, buildID)
 
 	return info
