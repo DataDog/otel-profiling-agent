@@ -135,7 +135,7 @@ jobs:
       RELEASE_VERSION: dev
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     name: Publish pre-release
-    needs: test
+    needs: [test, lint]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
