@@ -15,7 +15,7 @@ make agent
 
 This will create a `otel-profiling-agent` binary in the current directory.
 
-Alternatively you can download pre-built amd64 and arm64 binaries from a recent [CI release run](https://github.com/DataDog/otel-profiling-agent/actions/workflows/release.yml) by selecting a recent run and then scrolling down to the "Artifacts" section.
+Alternatively you can download pre-built amd64 and arm64 binaries for our [latest release](https://github.com/DataDog/otel-profiling-agent/releases/latest).
 
 ## Run
 
