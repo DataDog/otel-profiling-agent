@@ -1,3 +1,42 @@
+# Datadog Fork
+
+This is an experimental fork of [elastic/otel-profiling-agent](https://github.com/elastic/otel-profiling-agent). The upstream project is in the process of being [donated](https://github.com/open-telemetry/community/issues/1918) to the OpenTelemetry project. Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of offically supported Datadog profilers.
+
+Our fork adds support for sending profiling data to the Datadog backend via the Datadog Agent. We are active members of the OpenTelemetry Profiling SIG that is working on the OpenTelemetry profiling signal. However, the signal is still under active development, so this fork can be used by Datadog users until we release our support for directly ingesting the data using OTLP.
+
+## Build
+
+To build the agent, you can use the following commands:
+
+```
+make docker-image
+make agent
+```
+
+This will create a `otel-profiling-agent` binary in the current directory.
+
+Alternatively you can download pre-built amd64 and arm64 binaries for our [latest release](https://github.com/DataDog/otel-profiling-agent/releases/latest).
+
+## Run
+
+To run the agent, you need to make sure that debugfs is mounted. If it's not, you can run:
+
+```
+sudo mount -t debugfs none /sys/kernel/debug
+```
+
+After that, you can start the agent as shown below:
+
+```
+sudo otel-profiling-agent -tags 'service:myservice;remote_symbols:yes' -collection-agent "http://localhost:8126" -reporter-interval 60s -samples-per-second 20
+```
+
+For this to work you need to run a Datadog agent that listens for APM traffic at `localhost:8126`. If your agent is reachable under a different address, you can modify the `-collection-agent` parameter accordingly.
+
+The contents of the original upstream README are below.
+
+---
+
 > [!NOTE] 
 > 
 > Please be aware that we currently won't merge 3rd party PRs because this repository
