@@ -8,7 +8,7 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     cross_pkg_arch=$(uname -m | sed -e 's/aarch64/x86-64/' -e 's/x86_64/aarch64/'); \
     apt-get update -y && \
     apt-get dist-upgrade -y && \
-    apt-get install -y wget make git clang-16 golang unzip \
+    apt-get install -y wget make git clang-16 golang unzip sudo \
         gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross && \
     apt-get clean autoclean && \
     apt-get autoremove --yes
@@ -35,9 +35,10 @@ RUN                                                                             
 # The docker image is built as root - make binaries available to user.
 RUN mv /root/go/bin/* /usr/local/bin/
 
-ENV GOPATH=/agent/go
 ENV GOCACHE=/agent/.cache
 
-RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"" >> ~/.bashrc
+RUN useradd -ms /bin/bash build
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN adduser build sudo
 
-ENTRYPOINT ["/bin/bash", "-l", "-c"]
+USER build
