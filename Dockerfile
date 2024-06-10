@@ -6,7 +6,7 @@ ARG arch=amd64
 
 RUN apt-get update -y && apt-get dist-upgrade -y && apt-get install -y \
     curl wget cmake dwz lsb-release software-properties-common gnupg git clang llvm \
-    golang unzip
+    golang unzip sudo
 
 RUN git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git && \
     cd zydis && mkdir build && cd build && \
@@ -38,6 +38,8 @@ RUN mv /root/go/bin/* /usr/local/bin/
 
 ENV GOCACHE=/agent/.cache
 
-RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"" >> ~/.bashrc
+RUN useradd -ms /bin/bash build
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN adduser build sudo
 
-ENTRYPOINT ["/bin/bash", "-l", "-c"]
+USER build
