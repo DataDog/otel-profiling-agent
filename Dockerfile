@@ -36,7 +36,6 @@ RUN                                                                             
 # The docker image is built as root - make binaries available to user.
 RUN mv /root/go/bin/* /usr/local/bin/
 
-ENV GOPATH=/agent/go
 ENV GOCACHE=/agent/.cache
 
 RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"" >> ~/.bashrc
