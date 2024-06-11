@@ -105,6 +105,9 @@ type Process interface {
 	// GetMapping reads and parses process memory mappings
 	GetMappings() ([]Mapping, error)
 
+	// GetExecutablePath returns the path to the executable of the process
+	GetExecutablePath() (string, error)
+
 	// GetThread reads the process thread states
 	GetThreads() ([]ThreadInfo, error)
 

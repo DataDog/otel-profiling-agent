@@ -93,6 +93,8 @@ type GRPCReporter struct {
 	hostMetadataQueue fifoRingBuffer[*HostMetadata]
 	// fallbackSymbolsQueue is a ring buffer based FIFO for *fallbackSymbol
 	fallbackSymbolsQueue fifoRingBuffer[*fallbackSymbol]
+	// execPathesQueue stores the last known execPath for a PID.
+	execPathesQueue fifoRingBuffer[*processMetadata]
 }
 
 // Assert that we implement the full Reporter interface.
@@ -109,6 +111,11 @@ type executableMetadata struct {
 	buildID  string
 }
 
+type processMetadata struct {
+	pid      libpf.PID
+	execPath string
+}
+
 // ExecutableMetadata implements the SymbolReporter interface.
 func (r *GRPCReporter) ExecutableMetadata(ctx context.Context, fileID libpf.FileID,
 	fileName, buildID string) {
@@ -122,6 +129,13 @@ func (r *GRPCReporter) ExecutableMetadata(ctx context.Context, fileID libpf.File
 			buildID:  buildID,
 		})
 	}
+}
+
+func (r *GRPCReporter) ProcessMetadata(_ context.Context, pid libpf.PID, execPath string) {
+	r.execPathesQueue.append(&processMetadata{
+		pid:      pid,
+		execPath: execPath,
+	})
 }
 
 // FrameMetadata implements the SymbolReporter interface.
@@ -140,7 +154,7 @@ func (r *GRPCReporter) FrameMetadata(fileID libpf.FileID,
 
 // ReportCountForTrace implements the TraceReporter interface.
 func (r *GRPCReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string) {
+	count uint16, comm, podName, containerName string, pid libpf.PID) {
 	r.countsForTracesQueue.append(&libpf.TraceAndCounts{
 		Hash:          traceHash,
 		Timestamp:     timestamp,
@@ -148,6 +162,7 @@ func (r *GRPCReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp 
 		Comm:          comm,
 		PodName:       podName,
 		ContainerName: containerName,
+		PID:           pid,
 	})
 }
 

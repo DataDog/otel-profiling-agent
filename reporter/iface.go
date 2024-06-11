@@ -48,7 +48,7 @@ type TraceReporter interface {
 	// ReportCountForTrace accepts a hash of a trace with a corresponding count and
 	// caches this information before a periodic reporting to the backend.
 	ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-		count uint16, comm, podName, containerName string)
+		count uint16, comm, podName, containerName string, pid libpf.PID)
 }
 
 type SymbolReporter interface {
@@ -63,6 +63,10 @@ type SymbolReporter interface {
 	// a periodic reporting to the backend.
 	FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
 		lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string)
+
+	// ProcessMetadata accepts metadata associated with a process and caches this information
+	// before a periodic reporting to the backend.
+	ProcessMetadata(ctx context.Context, pid libpf.PID, exe string)
 }
 
 type HostMetadataReporter interface {

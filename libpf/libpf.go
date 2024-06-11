@@ -476,6 +476,7 @@ type TraceAndCounts struct {
 	Comm          string
 	PodName       string
 	ContainerName string
+	PID           PID
 }
 
 type FrameMetadata struct {
