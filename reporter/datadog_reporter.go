@@ -9,6 +9,7 @@ package reporter
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -600,6 +601,10 @@ func addTraceLabels(labels map[string][]string, i traceInfo) {
 
 	if i.apmServiceName != "" {
 		labels["apmServiceName"] = append(labels["apmServiceName"], i.apmServiceName)
+	}
+
+	if i.pid != 0 {
+		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
 	}
 }
 

@@ -743,8 +743,8 @@ func getTraceLabels(stringMap map[string]uint32, i traceInfo) []*pprofextended.L
 	}
 
 	if i.pid != 0 {
-		pidIdx := getStringMapIndex(stringMap, "pid")
-		pidValueIdx := getStringMapIndex(stringMap, string(i.pid))
+		pidIdx := getStringMapIndex(stringMap, "process_id")
+		pidValueIdx := getStringMapIndex(stringMap, fmt.Sprintf("%d", i.pid))
 
 		labels = append(labels, &pprofextended.Label{
 			Key: int64(pidIdx),
