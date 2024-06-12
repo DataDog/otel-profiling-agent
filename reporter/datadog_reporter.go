@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -536,8 +537,9 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		}
 
 		if execPath != "" {
+			base := path.Base(execPath)
 			loc := createPProfLocation(profile, 0)
-			m := createPprofFunctionEntry(funcMap, profile, "", execPath)
+			m := createPprofFunctionEntry(funcMap, profile, base, execPath)
 			loc.Line = append(loc.Line, pprofile.Line{Function: m})
 			sample.Location = append(sample.Location, loc)
 		}
