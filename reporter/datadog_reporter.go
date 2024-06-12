@@ -9,8 +9,10 @@ package reporter
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -66,6 +68,9 @@ type DatadogReporter struct {
 
 	// frames maps frame information to its source location.
 	frames *lru.SyncedLRU[libpf.FileID, map[libpf.AddressOrLineno]sourceInfo]
+
+	// execPathes stores the last known execPath for a PID.
+	execPathes *lru.SyncedLRU[libpf.PID, string]
 }
 
 // ReportFramesForTrace accepts a trace with the corresponding frames
@@ -94,7 +99,7 @@ func (r *DatadogReporter) ReportFramesForTrace(trace *libpf.Trace) {
 // caches this information.
 // nolint: dupl
 func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string) {
+	count uint16, comm, podName, containerName string, pid libpf.PID) {
 	if v, exists := r.traces.Peek(traceHash); exists {
 		// As traces is filled from two different API endpoints,
 		// some information for the trace might be available already.
@@ -103,6 +108,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 		v.comm = comm
 		v.podName = podName
 		v.containerName = containerName
+		v.pid = pid
 
 		r.traces.Add(traceHash, v)
 	} else {
@@ -110,6 +116,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 			comm:          comm,
 			podName:       podName,
 			containerName: containerName,
+			pid:           pid,
 		})
 	}
 
@@ -142,6 +149,10 @@ func (r *DatadogReporter) ExecutableMetadata(_ context.Context,
 		fileName: fileName,
 		buildID:  buildID,
 	})
+}
+
+func (r *DatadogReporter) ProcessMetadata(_ context.Context, pid libpf.PID, execPath string) {
+	r.execPathes.Add(pid, execPath)
 }
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
@@ -241,6 +252,11 @@ func StartDatadog(mainCtx context.Context, c *Config) (Reporter, error) {
 		return nil, err
 	}
 
+	execPathes, err := lru.NewSynced[libpf.PID, string](cacheSize, libpf.PID.Hash32)
+	if err != nil {
+		return nil, err
+	}
+
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -261,6 +277,7 @@ func StartDatadog(mainCtx context.Context, c *Config) (Reporter, error) {
 		executables:     executables,
 		frames:          frames,
 		hostmetadata:    hostmetadata,
+		execPathes:      execPathes,
 	}
 
 	// Create a child context for reporting features
@@ -511,6 +528,23 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 			sample.Location = append(sample.Location, loc)
 		}
 
+		execPath, _ := r.execPathes.Get(trace.pid)
+
+		// Check if the last frame is a kernel frame.
+		if trace.frameTypes[len(trace.frameTypes)-1] == libpf.KernelFrame {
+			// If the last frame is a kernel frame, we need to add a dummy
+			// location with the kernel as the function name.
+			execPath = "kernel"
+		}
+
+		if execPath != "" {
+			base := path.Base(execPath)
+			loc := createPProfLocation(profile, 0)
+			m := createPprofFunctionEntry(funcMap, profile, base, execPath)
+			loc.Line = append(loc.Line, pprofile.Line{Function: m})
+			sample.Location = append(sample.Location, loc)
+		}
+
 		sample.Label = make(map[string][]string)
 		addTraceLabels(sample.Label, trace)
 
@@ -567,6 +601,10 @@ func addTraceLabels(labels map[string][]string, i traceInfo) {
 
 	if i.apmServiceName != "" {
 		labels["apmServiceName"] = append(labels["apmServiceName"], i.apmServiceName)
+	}
+
+	if i.pid != 0 {
+		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
 	}
 }
 

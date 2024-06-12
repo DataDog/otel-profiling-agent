@@ -166,6 +166,10 @@ func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {
 	return nil, errors.New("not implemented")
 }
 
+func (sp *systemProcess) GetExecutablePath() (string, error) {
+	return os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+}
+
 func (sp *systemProcess) Close() error {
 	return nil
 }

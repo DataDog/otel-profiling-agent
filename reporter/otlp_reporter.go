@@ -39,6 +39,7 @@ type traceInfo struct {
 	podName        string
 	containerName  string
 	apmServiceName string
+	pid            libpf.PID
 }
 
 // sample holds dynamic information about traces.
@@ -101,6 +102,9 @@ type OTLPReporter struct {
 
 	// frames maps frame information to its source location.
 	frames *lru.SyncedLRU[libpf.FileID, map[libpf.AddressOrLineno]sourceInfo]
+
+	// execPathes stores the last known execPath for a PID.
+	execPathes *lru.SyncedLRU[libpf.PID, string]
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -136,7 +140,7 @@ func (r *OTLPReporter) ReportFramesForTrace(trace *libpf.Trace) {
 // caches this information.
 // nolint: dupl
 func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string) {
+	count uint16, comm, podName, containerName string, pid libpf.PID) {
 	if v, exists := r.traces.Peek(traceHash); exists {
 		// As traces is filled from two different API endpoints,
 		// some information for the trace might be available already.
@@ -145,6 +149,7 @@ func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp 
 		v.comm = comm
 		v.podName = podName
 		v.containerName = containerName
+		v.pid = pid
 
 		r.traces.Add(traceHash, v)
 	} else {
@@ -152,6 +157,7 @@ func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp 
 			comm:          comm,
 			podName:       podName,
 			containerName: containerName,
+			pid:           pid,
 		})
 	}
 
@@ -184,6 +190,10 @@ func (r *OTLPReporter) ExecutableMetadata(_ context.Context,
 		fileName: fileName,
 		buildID:  buildID,
 	})
+}
+
+func (r *OTLPReporter) ProcessMetadata(_ context.Context, pid libpf.PID, execPath string) {
+	r.execPathes.Add(pid, execPath)
 }
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
@@ -729,6 +739,16 @@ func getTraceLabels(stringMap map[string]uint32, i traceInfo) []*pprofextended.L
 		labels = append(labels, &pprofextended.Label{
 			Key: int64(apmServiceNameIdx),
 			Str: int64(apmServiceNameValueIdx),
+		})
+	}
+
+	if i.pid != 0 {
+		pidIdx := getStringMapIndex(stringMap, "process_id")
+		pidValueIdx := getStringMapIndex(stringMap, fmt.Sprintf("%d", i.pid))
+
+		labels = append(labels, &pprofextended.Label{
+			Key: int64(pidIdx),
+			Str: int64(pidValueIdx),
 		})
 	}
 

@@ -63,6 +63,8 @@ func (d *dummyProcess) GetMappingFile(_ *process.Mapping) string {
 	return ""
 }
 
+func (d *dummyProcess) GetExecutablePath() (string, error) { return "", nil }
+
 func (d *dummyProcess) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
 	return pfelf.CalculateID(m.Path)
 }
