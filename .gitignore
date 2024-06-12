@@ -7,3 +7,4 @@ otel-profiling-agent
 tracer.ebpf
 tracer.ebpf.arm64
 tracer.ebpf.x86
+.env
