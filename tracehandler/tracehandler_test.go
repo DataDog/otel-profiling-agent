@@ -90,7 +90,7 @@ func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
 func (m *mockReporter) SupportsReportTraceEvent() bool { return false }
 
 func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace,
-	_ libpf.UnixTime64, _, _, _, _ string) {
+	_ libpf.UnixTime64, _, _, _, _ string, _ util.PID) {
 }
 
 type mockContainerMetadataHandler struct{}

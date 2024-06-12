@@ -282,6 +282,13 @@ func (cd *CoredumpProcess) GetMappingFileLastModified(_ *Mapping) int64 {
 	return 0
 }
 
+func (cd *CoredumpProcess) GetExecutablePath() (string, error) {
+	if cd.MainExecutable() == "" {
+		return "", errors.New("no main executable found")
+	}
+	return cd.MainExecutable(), nil
+}
+
 // CalculateMappingFileID implements the Process interface
 func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error) {
 	// It is not possible to calculate the real FileID as the section headers

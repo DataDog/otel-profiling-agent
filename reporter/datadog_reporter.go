@@ -9,9 +9,11 @@ package reporter
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -65,11 +67,14 @@ type DatadogReporter struct {
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[map[libpf.TraceHash]traceFramesCounts]
+
+	// execPathes stores the last known execPath for a PID.
+	execPathes *lru.SyncedLRU[util.PID, string]
 }
 
 // ReportTraceEvent enqueues reported trace events for the Datadog reporter.
 func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-	comm, podName, containerName, apmServiceName string) {
+	comm, podName, containerName, apmServiceName string, pid util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -87,6 +92,7 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.U
 		podName:        podName,
 		containerName:  containerName,
 		apmServiceName: apmServiceName,
+		pid:            pid,
 		timestamps:     []uint64{uint64(timestamp)},
 	}
 }
@@ -121,6 +127,10 @@ func (r *DatadogReporter) ExecutableMetadata(_ context.Context,
 		fileName: fileName,
 		buildID:  buildID,
 	})
+}
+
+func (r *DatadogReporter) ProcessMetadata(_ context.Context, pid util.PID, execPath string) {
+	r.execPathes.Add(pid, execPath)
 }
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
@@ -214,6 +224,11 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		return nil, err
 	}
 
+	execPathes, err := lru.NewSynced[util.PID, string](cacheSize, util.PID.Hash32)
+	if err != nil {
+		return nil, err
+	}
+
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -233,6 +248,7 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		frames:          frames,
 		hostmetadata:    hostmetadata,
 		traceEvents:     xsync.NewRWMutex(map[libpf.TraceHash]traceFramesCounts{}),
+		execPathes:      execPathes,
 	}
 
 	// Create a child context for reporting features
@@ -461,6 +477,23 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 			sample.Location = append(sample.Location, loc)
 		}
 
+		execPath, _ := r.execPathes.Get(traceInfo.pid)
+
+		// Check if the last frame is a kernel frame.
+		if traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
+			// If the last frame is a kernel frame, we need to add a dummy
+			// location with the kernel as the function name.
+			execPath = "kernel"
+		}
+
+		if execPath != "" {
+			base := path.Base(execPath)
+			loc := createPProfLocation(profile, 0)
+			m := createPprofFunctionEntry(funcMap, profile, base, execPath)
+			loc.Line = append(loc.Line, pprofile.Line{Function: m})
+			sample.Location = append(sample.Location, loc)
+		}
+
 		sample.Label = make(map[string][]string)
 		addTraceLabels(sample.Label, traceInfo)
 
@@ -517,6 +550,10 @@ func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
 
 	if i.apmServiceName != "" {
 		labels["apmServiceName"] = append(labels["apmServiceName"], i.apmServiceName)
+	}
+
+	if i.pid != 0 {
+		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
 	}
 }
 

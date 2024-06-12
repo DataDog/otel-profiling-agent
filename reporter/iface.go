@@ -41,7 +41,7 @@ type TraceReporter interface {
 	// and caches it for reporting to the backend. It returns true if the event was
 	// enqueued for reporting, and false if the event was ignored.
 	ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-		comm, podName, containerName, apmServiceName string)
+		comm, podName, containerName, apmServiceName string, pid util.PID)
 
 	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
 	// via ReportTraceEvent().
@@ -60,6 +60,10 @@ type SymbolReporter interface {
 	// a periodic reporting to the backend.
 	FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
 		lineNumber util.SourceLineno, functionOffset uint32, functionName, filePath string)
+
+	// ProcessMetadata accepts metadata associated with a process and caches this information
+	// before a periodic reporting to the backend.
+	ProcessMetadata(ctx context.Context, pid util.PID, exe string)
 }
 
 type HostMetadataReporter interface {

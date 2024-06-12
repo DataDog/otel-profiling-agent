@@ -67,6 +67,8 @@ func (d *dummyProcess) GetMappingFileLastModified(_ *process.Mapping) int64 {
 	return 0
 }
 
+func (d *dummyProcess) GetExecutablePath() (string, error) { return "", nil }
+
 func (d *dummyProcess) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
 	return libpf.FileIDFromExecutableFile(m.Path)
 }
@@ -264,6 +266,8 @@ func (s *symbolReporterMockup) ExecutableMetadata(_ context.Context, _ libpf.Fil
 func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
 	_ util.SourceLineno, _ uint32, _, _ string) {
 }
+
+func (s *symbolReporterMockup) ProcessMetadata(_ context.Context, _ util.PID, _ string) {}
 
 var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)
 

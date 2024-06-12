@@ -603,6 +603,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
+
+	execPath, _ := pr.GetExecutablePath()
+	pm.reporter.ProcessMetadata(context.TODO(), pid, execPath)
 }
 
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.

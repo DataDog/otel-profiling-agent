@@ -65,6 +65,7 @@ type traceFramesCounts struct {
 	podName        string
 	containerName  string
 	apmServiceName string
+	pid            util.PID
 	timestamps     []uint64 // in nanoseconds
 }
 
@@ -106,6 +107,9 @@ type OTLPReporter struct {
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
+
+	// execPathes stores the last known execPath for a PID.
+	execPathes *lru.SyncedLRU[util.PID, string]
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -120,7 +124,7 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	timestamp libpf.UnixTime64, comm, podName,
-	containerName, apmServiceName string) {
+	containerName, apmServiceName string, pid util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -138,6 +142,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		podName:        podName,
 		containerName:  containerName,
 		apmServiceName: apmServiceName,
+		pid:            pid,
 		timestamps:     []uint64{uint64(timestamp)},
 	}
 }
@@ -166,6 +171,10 @@ func (r *OTLPReporter) ExecutableMetadata(_ context.Context,
 		fileName: fileName,
 		buildID:  buildID,
 	})
+}
+
+func (r *OTLPReporter) ProcessMetadata(_ context.Context, pid util.PID, execPath string) {
+	r.execPathes.Add(pid, execPath)
 }
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
@@ -695,6 +704,7 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 	addAttr(semconv.ContainerNameKey, i.containerName)
 	addAttr(semconv.ThreadNameKey, i.comm)
 	addAttr(semconv.ServiceNameKey, i.apmServiceName)
+	addAttr("process_id", strconv.Itoa(int(i.pid)))
 
 	return indices
 }

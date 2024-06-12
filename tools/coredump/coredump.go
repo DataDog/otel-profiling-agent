@@ -80,6 +80,8 @@ func (c *symbolizationCache) FrameMetadata(fileID libpf.FileID,
 
 func (c *symbolizationCache) ReportFallbackSymbol(libpf.FrameID, string) {}
 
+func (c *symbolizationCache) ProcessMetadata(_ context.Context, _ util.PID, _ string) {}
+
 func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 	file, err := os.Open("../errors-codegen/errors.json")
 	if err != nil {

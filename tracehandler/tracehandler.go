@@ -158,7 +158,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	svcName := m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if m.reporter.SupportsReportTraceEvent() {
 		m.reporter.ReportTraceEvent(umTrace, timestamp,
-			bpfTrace.Comm, meta.PodName, meta.ContainerName, svcName)
+			bpfTrace.Comm, meta.PodName, meta.ContainerName, svcName, bpfTrace.PID)
 		return
 	}
 	m.reporter.ReportCountForTrace(umTrace.Hash, timestamp, 1,

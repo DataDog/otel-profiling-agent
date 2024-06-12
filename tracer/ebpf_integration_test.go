@@ -102,6 +102,7 @@ func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string)           
 func (f mockReporter) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno, _ util.SourceLineno,
 	_ uint32, _, _ string) {
 }
+func (f mockReporter) ProcessMetadata(_ context.Context, _ util.PID, _ string) {}
 
 func generateMaxLengthTrace() host.Trace {
 	var trace host.Trace
