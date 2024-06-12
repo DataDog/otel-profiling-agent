@@ -323,7 +323,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	}
 
 	tags := strings.Split(config.ValidatedTags(), ";")
-	tags = append(tags, "runtime:go")
+	tags = append(tags, "runtime:native")
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
 	for _, tag := range tags {
@@ -386,12 +386,12 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 
 	numSamples := len(samplesCpy)
 	profile = &pprofile.Profile{
-		SampleType: []*pprofile.ValueType{{Type: "samples", Unit: "count"},
-			{Type: "cpu", Unit: "nanoseconds"}},
+		SampleType: []*pprofile.ValueType{{Type: "cpu-samples", Unit: "count"},
+			{Type: "cpu-time", Unit: "nanoseconds"}},
 		Sample:            make([]*pprofile.Sample, 0, numSamples),
-		PeriodType:        &pprofile.ValueType{Type: "cpu", Unit: "nanoseconds"},
+		PeriodType:        &pprofile.ValueType{Type: "cpu-time", Unit: "nanoseconds"},
 		Period:            int64(r.samplingPeriod),
-		DefaultSampleType: "cpu",
+		DefaultSampleType: "cpu-time",
 	}
 
 	fileIDtoMapping := make(map[libpf.FileID]*pprofile.Mapping)
