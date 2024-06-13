@@ -537,7 +537,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		execPath, _ := r.execPathes.Get(trace.pid)
 
 		// Check if the last frame is a kernel frame.
-		if len(trace.frameTypes) > 0 && trace.frameTypes[len(trace.frameTypes)-1] == libpf.KernelFrame {
+		if len(trace.frameTypes) > 0 &&
+			trace.frameTypes[len(trace.frameTypes)-1] == libpf.KernelFrame {
 			// If the last frame is a kernel frame, we need to add a dummy
 			// location with the kernel as the function name.
 			execPath = "kernel"
