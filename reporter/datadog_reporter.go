@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -311,7 +312,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	}
 
 	tags := strings.Split(config.ValidatedTags(), ";")
-	tags = append(tags, "runtime:native")
+	tags = append(tags, "runtime:native", fmt.Sprintf("cpu_arch:%s", runtime.GOARCH))
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
 	for _, tag := range tags {
