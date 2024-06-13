@@ -10,6 +10,7 @@ services:
     pid: "host"
     volumes:
       - .:/agent
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: bash -c "sudo mount -t debugfs none /sys/kernel/debug && make && sudo /agent/otel-profiling-agent -tags 'service:${OTEL_PROFILING_AGENT_SERVICE:-otel-profiling-agent-dev};remote_symbols:yes' -collection-agent "http://datadog-agent:8126" -reporter-interval ${OTEL_PROFILING_AGENT_REPORTER_INTERVAL:-60s} -samples-per-second 20 -save-cpuprofile"
 
   datadog-agent:
