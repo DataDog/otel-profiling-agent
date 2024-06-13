@@ -154,13 +154,14 @@ func (r *GRPCReporter) FrameMetadata(fileID libpf.FileID,
 
 // ReportCountForTrace implements the TraceReporter interface.
 func (r *GRPCReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string, pid libpf.PID) {
+	count uint16, comm, podName, containerID, containerName string, pid libpf.PID) {
 	r.countsForTracesQueue.append(&libpf.TraceAndCounts{
 		Hash:          traceHash,
 		Timestamp:     timestamp,
 		Count:         count,
 		Comm:          comm,
 		PodName:       podName,
+		ContainerID:   containerID,
 		ContainerName: containerName,
 		PID:           pid,
 	})

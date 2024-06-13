@@ -303,9 +303,9 @@ func TestGetKubernetesPodMetadata(t *testing.T) {
 				if !ok {
 					t.Fatal("container metadata should be in the container metadata cache")
 				}
-				if value.containerID != test.expContainerID {
+				if value.ContainerID != test.expContainerID {
 					t.Fatalf("expected container name %v but got %v",
-						test.expContainerID, value.containerID)
+						test.expContainerID, value.ContainerID)
 				}
 				if value.ContainerName != test.expContainerName {
 					t.Fatalf("expected container name %v but got %v",
