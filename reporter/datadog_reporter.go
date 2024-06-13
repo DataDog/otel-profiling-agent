@@ -312,6 +312,11 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	}
 
 	tags := strings.Split(config.ValidatedTags(), ";")
+
+	customAttributes := []string{"container_name"}
+	for _, attr := range customAttributes {
+		tags = append(tags, fmt.Sprintf("ddprof.custom_ctx:%s", attr))
+	}
 	tags = append(tags, "runtime:native", fmt.Sprintf("cpu_arch:%s", runtime.GOARCH))
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
@@ -546,7 +551,7 @@ func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
 	}
 
 	if i.containerName != "" {
-		labels["containerName"] = append(labels["containerName"], i.containerName)
+		labels["container_name"] = append(labels["container_name"], i.containerName)
 	}
 
 	if i.apmServiceName != "" {
