@@ -33,6 +33,29 @@ sudo otel-profiling-agent -tags 'service:myservice;remote_symbols:yes' -collecti
 
 For this to work you need to run a Datadog agent that listens for APM traffic at `localhost:8126`. If your agent is reachable under a different address, you can modify the `-collection-agent` parameter accordingly.
 
+## Development
+
+A `docker-compose.yml` file is provided to help run the agent in a container for local development.
+
+First, create a `.env` file with the following content:
+
+```
+ARCH=amd64 # required
+DD_API_KEY=your-api-key # required
+DD_SITE=datadoghq.com # optional, defaults to "datadoghq.com"
+OTEL_PROFILING_AGENT_SERVICE=my-service # optional, defaults to "otel-profiling-agent-dev"
+OTEL_PROFILING_AGENT_REPORTER_INTERVAL=10s # optional, defaults to 60s
+```
+
+Then, you can run the agent with the following command:
+
+```
+docker-compose up
+```
+
+The agent will submit profiling data to the Datadog Agent using the value of OTEL_PROFILING_AGENT_SERVICE as the service name.
+
+
 The contents of the original upstream README are below.
 
 ---

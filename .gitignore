@@ -5,4 +5,4 @@
 /go
 otel-profiling-agent
 ci-kernels
-
+.env
