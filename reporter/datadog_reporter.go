@@ -316,7 +316,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 
 	tags := strings.Split(config.ValidatedTags(), ";")
 
-	customAttributes := []string{"container_id", "container_name"}
+	customAttributes := []string{"container_id", "container_name", "thread_name"}
 	for _, attr := range customAttributes {
 		tags = append(tags, "ddprof.custom_ctx:"+attr)
 	}
@@ -418,7 +418,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 					loc.Mapping = tmpMapping
 				}
 				line := pprofile.Line{Function: createPprofFunctionEntry(funcMap, profile, "",
-					traceInfo.comm)}
+					loc.Mapping.File)}
 				loc.Line = append(loc.Line, line)
 			case libpf.KernelFrame:
 				// Reconstruct frameID
@@ -547,7 +547,7 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 
 func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
 	if i.comm != "" {
-		labels["comm"] = append(labels["comm"], i.comm)
+		labels["thread_name"] = append(labels["thread_name"], i.comm)
 	}
 
 	if i.podName != "" {
