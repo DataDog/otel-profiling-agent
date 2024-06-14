@@ -100,7 +100,7 @@ func (r *DatadogReporter) ReportFramesForTrace(trace *libpf.Trace) {
 // caches this information.
 // nolint: dupl
 func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string, pid libpf.PID) {
+	count uint16, comm, podName, containerID, containerName string, pid libpf.PID) {
 	if v, exists := r.traces.Peek(traceHash); exists {
 		// As traces is filled from two different API endpoints,
 		// some information for the trace might be available already.
@@ -108,6 +108,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 		// the existing one.
 		v.comm = comm
 		v.podName = podName
+		v.containerID = containerID
 		v.containerName = containerName
 		v.pid = pid
 
@@ -116,6 +117,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 		r.traces.Add(traceHash, traceInfo{
 			comm:          comm,
 			podName:       podName,
+			containerID:   containerID,
 			containerName: containerName,
 			pid:           pid,
 		})
@@ -342,7 +344,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 
 	tags := strings.Split(config.ValidatedTags(), ";")
 
-	customAttributes := []string{"container_name"}
+	customAttributes := []string{"container_id", "container_name"}
 	for _, attr := range customAttributes {
 		tags = append(tags, fmt.Sprintf("ddprof.custom_ctx:%s", attr))
 	}
@@ -600,6 +602,10 @@ func addTraceLabels(labels map[string][]string, i traceInfo) {
 
 	if i.podName != "" {
 		labels["podName"] = append(labels["podName"], i.podName)
+	}
+
+	if i.containerID != "" {
+		labels["container_id"] = append(labels["container_id"], i.containerID)
 	}
 
 	if i.containerName != "" {

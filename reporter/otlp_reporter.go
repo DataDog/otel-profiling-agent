@@ -37,6 +37,7 @@ type traceInfo struct {
 	frameTypes     []libpf.FrameType
 	comm           string
 	podName        string
+	containerID    string
 	containerName  string
 	apmServiceName string
 	pid            libpf.PID
@@ -140,7 +141,7 @@ func (r *OTLPReporter) ReportFramesForTrace(trace *libpf.Trace) {
 // caches this information.
 // nolint: dupl
 func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerName string, pid libpf.PID) {
+	count uint16, comm, podName, containerID, containerName string, pid libpf.PID) {
 	if v, exists := r.traces.Peek(traceHash); exists {
 		// As traces is filled from two different API endpoints,
 		// some information for the trace might be available already.
@@ -149,6 +150,7 @@ func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp 
 		v.comm = comm
 		v.podName = podName
 		v.containerName = containerName
+		v.containerID = containerID
 		v.pid = pid
 
 		r.traces.Add(traceHash, v)
@@ -156,6 +158,7 @@ func (r *OTLPReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp 
 		r.traces.Add(traceHash, traceInfo{
 			comm:          comm,
 			podName:       podName,
+			containerID:   containerID,
 			containerName: containerName,
 			pid:           pid,
 		})
@@ -749,6 +752,16 @@ func getTraceLabels(stringMap map[string]uint32, i traceInfo) []*pprofextended.L
 		labels = append(labels, &pprofextended.Label{
 			Key: int64(pidIdx),
 			Str: int64(pidValueIdx),
+		})
+	}
+
+	if i.containerID != "" {
+		containerIDIdx := getStringMapIndex(stringMap, "container_id")
+		containerIDValueIdx := getStringMapIndex(stringMap, i.containerID)
+
+		labels = append(labels, &pprofextended.Label{
+			Key: int64(containerIDIdx),
+			Str: int64(containerIDValueIdx),
 		})
 	}
 

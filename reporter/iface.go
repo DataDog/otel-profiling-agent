@@ -48,7 +48,7 @@ type TraceReporter interface {
 	// ReportCountForTrace accepts a hash of a trace with a corresponding count and
 	// caches this information before a periodic reporting to the backend.
 	ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-		count uint16, comm, podName, containerName string, pid libpf.PID)
+		count uint16, comm, podName, containerID, containerName string, pid libpf.PID)
 }
 
 type SymbolReporter interface {
