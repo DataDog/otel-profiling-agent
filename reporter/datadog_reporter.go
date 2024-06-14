@@ -470,7 +470,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 					loc.Mapping = tmpMapping
 				}
 				line := pprofile.Line{Function: createPprofFunctionEntry(funcMap, profile, "",
-					trace.comm)}
+					loc.Mapping.File)}
 				loc.Line = append(loc.Line, line)
 			case libpf.KernelFrame:
 				// Reconstruct frameID
