@@ -315,9 +315,9 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 
 	customAttributes := []string{"container_name"}
 	for _, attr := range customAttributes {
-		tags = append(tags, fmt.Sprintf("ddprof.custom_ctx:%s", attr))
+		tags = append(tags, "ddprof.custom_ctx:"+attr)
 	}
-	tags = append(tags, "runtime:native", fmt.Sprintf("cpu_arch:%s", runtime.GOARCH))
+	tags = append(tags, "runtime:native", "cpu_arch:"+runtime.GOARCH)
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
 	for _, tag := range tags {
@@ -486,7 +486,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		execPath, _ := r.execPathes.Get(traceInfo.pid)
 
 		// Check if the last frame is a kernel frame.
-		if traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
+		if len(traceInfo.frameTypes) > 0 &&
+			traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
 			// If the last frame is a kernel frame, we need to add a dummy
 			// location with the kernel as the function name.
 			execPath = "kernel"
