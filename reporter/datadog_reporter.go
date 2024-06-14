@@ -100,7 +100,7 @@ func (r *DatadogReporter) ReportFramesForTrace(trace *libpf.Trace) {
 // caches this information.
 // nolint: dupl
 func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime32,
-	count uint16, comm, podName, containerID, containerName string, pid libpf.PID) {
+	count uint16, comm, podName, containerID, containerName string, pid libpf.PID, tid libpf.TID) {
 	if v, exists := r.traces.Peek(traceHash); exists {
 		// As traces is filled from two different API endpoints,
 		// some information for the trace might be available already.
@@ -111,6 +111,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 		v.containerID = containerID
 		v.containerName = containerName
 		v.pid = pid
+		v.tid = tid
 
 		r.traces.Add(traceHash, v)
 	} else {
@@ -120,6 +121,7 @@ func (r *DatadogReporter) ReportCountForTrace(traceHash libpf.TraceHash, timesta
 			containerID:   containerID,
 			containerName: containerName,
 			pid:           pid,
+			tid:           tid,
 		})
 	}
 
@@ -618,6 +620,13 @@ func addTraceLabels(labels map[string][]string, i traceInfo) {
 
 	if i.pid != 0 {
 		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
+	}
+
+	if i.tid != 0 {
+		// The naming has an impact on the backend side,
+		// this is why we use "thread id" instead of "thread_id"
+		// This is also consistent with ddprof.
+		labels["thread id"] = append(labels["thread id"], fmt.Sprintf("%d", i.tid))
 	}
 }
 

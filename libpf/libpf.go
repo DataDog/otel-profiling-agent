@@ -54,6 +54,9 @@ func (p PID) Hash32() uint32 {
 	return uint32(p)
 }
 
+// TID represent a thread ID
+type TID int32
+
 // FileID is used for unique identifiers for files
 type FileID struct {
 	basehash.Hash128
@@ -478,6 +481,7 @@ type TraceAndCounts struct {
 	ContainerID   string
 	ContainerName string
 	PID           PID
+	TID           TID
 }
 
 type FrameMetadata struct {
