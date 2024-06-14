@@ -75,7 +75,7 @@ type DatadogReporter struct {
 
 // ReportTraceEvent enqueues reported trace events for the Datadog reporter.
 func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-	comm, podName, containerName, apmServiceName string, pid util.PID) {
+	comm, podName, containerID, containerName, apmServiceName string, pid util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -91,6 +91,7 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.U
 		frameTypes:     trace.FrameTypes,
 		comm:           comm,
 		podName:        podName,
+		containerID:    containerID,
 		containerName:  containerName,
 		apmServiceName: apmServiceName,
 		pid:            pid,
@@ -313,7 +314,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 
 	tags := strings.Split(config.ValidatedTags(), ";")
 
-	customAttributes := []string{"container_name"}
+	customAttributes := []string{"container_id", "container_name"}
 	for _, attr := range customAttributes {
 		tags = append(tags, "ddprof.custom_ctx:"+attr)
 	}
@@ -549,6 +550,10 @@ func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
 
 	if i.podName != "" {
 		labels["podName"] = append(labels["podName"], i.podName)
+	}
+
+	if i.containerID != "" {
+		labels["container_id"] = append(labels["container_id"], i.containerID)
 	}
 
 	if i.containerName != "" {

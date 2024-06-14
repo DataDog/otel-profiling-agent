@@ -77,6 +77,7 @@ type TraceAndCounts struct {
 	Count          uint16
 	Comm           string
 	PodName        string
+	ContainerID    string
 	ContainerName  string
 	APMServiceName string
 	PID            util.PID

@@ -88,6 +88,7 @@ var (
 	dockerBuildkitPattern = regexp.MustCompile(`\d+:.*:/.*/*docker/buildkit/([0-9a-z]+)`)
 	lxcPattern            = regexp.MustCompile(`\d+::/lxc\.(monitor|payload)\.([a-zA-Z]+)/`)
 	containerdPattern     = regexp.MustCompile(`\d+:.+:/([a-zA-Z0-9_-]+)/+([a-zA-Z0-9_-]+)`)
+	defaultPattern        = regexp.MustCompile(`^.*/(?:.*[-:])?([0-9a-f]+)(?:\.|\s*$)`)
 
 	containerIDPattern = regexp.MustCompile(`.+://([0-9a-f]{64})`)
 
@@ -130,7 +131,7 @@ type handler struct {
 
 // ContainerMetadata contains the container and/or pod metadata.
 type ContainerMetadata struct {
-	containerID   string
+	ContainerID   string
 	PodName       string
 	ContainerName string
 }
@@ -405,7 +406,7 @@ func (h *handler) putCache(pod *corev1.Pod) {
 		}
 
 		h.containerMetadataCache.Add(containerID, ContainerMetadata{
-			containerID:   containerID,
+			ContainerID:   containerID,
 			PodName:       podName,
 			ContainerName: pod.Status.ContainerStatuses[i].Name,
 		})
@@ -475,7 +476,9 @@ func (h *handler) GetContainerMetadata(pid util.PID) (ContainerMetadata, error) 
 	}
 	if envUndefined == env {
 		// We were not able to identify a container technology for the given PID.
-		return ContainerMetadata{}, nil
+		return ContainerMetadata{
+			ContainerID: pidContainerID,
+		}, nil
 	}
 
 	// Fast path, check if the containerID metadata has been cached
@@ -499,14 +502,14 @@ func (h *handler) GetContainerMetadata(pid util.PID) (ContainerMetadata, error) 
 		// from the docker socket. Therefore, we populate container ID and container name
 		// with the information we have.
 		return ContainerMetadata{
-			containerID:   pidContainerID,
+			ContainerID:   pidContainerID,
 			ContainerName: pidContainerID,
 		}, nil
 	case isContainerEnvironment(env, envLxc):
 		// As lxc does not use different identifiers we populate container ID and container
 		// name of metadata with the same information.
 		return ContainerMetadata{
-			containerID:   pidContainerID,
+			ContainerID:   pidContainerID,
 			ContainerName: pidContainerID,
 		}, nil
 	default:
@@ -543,7 +546,7 @@ func (h *handler) getKubernetesPodMetadata(pidContainerID string) (
 			}
 			if containerID == pidContainerID {
 				containerMetadata := ContainerMetadata{
-					containerID:   containerID,
+					ContainerID:   containerID,
 					PodName:       podName,
 					ContainerName: containers[i].Name,
 				}
@@ -577,7 +580,7 @@ func (h *handler) getDockerContainerMetadata(pidContainerID string) (
 			// remove / prefix from container name
 			containerName := strings.TrimPrefix(containers[i].Names[0], "/")
 			metadata := ContainerMetadata{
-				containerID:   containers[i].ID,
+				ContainerID:   containers[i].ID,
 				ContainerName: containerName,
 			}
 			h.containerMetadataCache.Add(pidContainerID, metadata)
@@ -618,7 +621,7 @@ func (h *handler) getContainerdContainerMetadata(pidContainerID string) (
 			// Containerd does not differentiate between the name and the ID of a
 			// container. So we both options to the same value.
 			return ContainerMetadata{
-				containerID:   fields[2],
+				ContainerID:   fields[2],
 				ContainerName: fields[2],
 				PodName:       fields[1],
 			}, nil
@@ -739,6 +742,11 @@ func (h *handler) extractContainerIDFromFile(cgroupFilePath string) (
 		if parts = lxcPattern.FindStringSubmatch(line); parts != nil {
 			containerID = parts[2]
 			env |= envLxc
+			break
+		}
+
+		if parts = defaultPattern.FindStringSubmatch(line); parts != nil {
+			containerID = parts[1]
 			break
 		}
 	}

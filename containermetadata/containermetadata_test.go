@@ -304,7 +304,7 @@ func TestGetKubernetesPodMetadata(t *testing.T) {
 				// check the item has been added correctly to the container metadata cache
 				value, ok := instance.containerMetadataCache.Get(test.expContainerID)
 				assert.True(t, ok, "container metadata should be in the container metadata cache")
-				assert.Equal(t, test.expContainerID, value.containerID)
+				assert.Equal(t, test.expContainerID, value.ContainerID)
 				assert.Equal(t, test.expContainerName, value.ContainerName)
 				assert.Equal(t, test.expPodName, value.PodName)
 			}
