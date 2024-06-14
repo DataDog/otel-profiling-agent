@@ -63,4 +63,5 @@ type Trace struct {
 	Hash   TraceHash
 	KTime  libpf.KTime
 	PID    libpf.PID
+	TID    libpf.TID
 }

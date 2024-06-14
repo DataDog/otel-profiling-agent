@@ -840,13 +840,14 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 	trace := &host.Trace{
 		Comm:  C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		PID:   libpf.PID(ptr.pid),
+		TID:   libpf.TID(ptr.tid),
 		KTime: libpf.KTime(ptr.ktime),
 	}
 
 	// Trace fields included in the hash:
 	//  - PID, kernel stack ID, length & frame array.
 	// Intentionally excluded:
-	//  - ktime, COMM
+	//  - ktime, COMM, TID
 	ptr.comm = [16]C.char{}
 	ptr.ktime = 0
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
