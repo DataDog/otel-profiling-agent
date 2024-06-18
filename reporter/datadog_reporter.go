@@ -346,7 +346,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 
 	tags := strings.Split(config.ValidatedTags(), ";")
 
-	customAttributes := []string{"container_id", "container_name", "thread_name"}
+	customAttributes := []string{"container_id", "container_name", "thread_name", "pod_name"}
 	for _, attr := range customAttributes {
 		tags = append(tags, fmt.Sprintf("ddprof.custom_ctx:%s", attr))
 	}
@@ -603,7 +603,7 @@ func addTraceLabels(labels map[string][]string, i traceInfo) {
 	}
 
 	if i.podName != "" {
-		labels["podName"] = append(labels["podName"], i.podName)
+		labels["pod_name"] = append(labels["pod_name"], i.podName)
 	}
 
 	if i.containerID != "" {
