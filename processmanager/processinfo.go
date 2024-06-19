@@ -216,8 +216,15 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, m *Mapping,
 // handleNewMapping processes new file backed mappings
 func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 	elfRef *pfelf.Reference) error {
+	fileID, ok := pm.FileIDMapper.Get(m.FileID)
+	if !ok {
+		log.Debugf("file ID lookup failed for PID %d, file ID %d",
+			pr.PID(), m.FileID)
+		fileID = libpf.UnsymbolizedFileID
+	}
+
 	// Resolve executable info first
-	ei, err := pm.eim.AddOrIncRef(m.FileID, elfRef)
+	ei, err := pm.eim.AddOrIncRef(m.FileID, fileID, elfRef)
 	if err != nil {
 		return err
 	}

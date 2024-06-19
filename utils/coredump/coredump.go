@@ -231,7 +231,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	}
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		pm.NewMapFileIDMapper(), symCache, coredumpOpener, false)
+		pm.NewMapFileIDMapper(), symCache, nil, coredumpOpener, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}

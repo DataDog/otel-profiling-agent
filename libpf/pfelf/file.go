@@ -31,6 +31,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"syscall"
 	"unsafe"
@@ -49,7 +50,11 @@ const (
 	// parsed sections (e.g. symbol tables and string tables; libxul
 	// has about 4MB .dynstr)
 	maxBytesLargeSection = 16 * 1024 * 1024
+	buildIDSectionName   = ".note.gnu.build-id"
 )
+
+var debugStrSectionNames = []string{".debug_str", ".zdebug_str", ".debug_str.dwo"}
+var debugInfoSectionNames = []string{".debug_info", ".zdebug_info"}
 
 // ErrSymbolNotFound is returned when requested symbol was not found
 var ErrSymbolNotFound = errors.New("symbol not found")
@@ -108,6 +113,11 @@ type File struct {
 
 	// bias is the load bias for ELF files inside core dump
 	bias libpf.Address
+
+	// filePath is the path of the ELF file as opened by os.Open()
+	// This can be a path to a mapping file, or a path to the original ELF binary.
+	// This is empty is the file is opened from a coredump.
+	filePath string
 
 	// InsideCore indicates that this ELF is mapped from a coredump ELF
 	InsideCore bool
@@ -168,7 +178,7 @@ func Open(name string) (*File, error) {
 		return nil, err
 	}
 
-	ff, err := newFile(buffered, f, 0, false)
+	ff, err := newFile(name, buffered, f, 0, false)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -186,13 +196,15 @@ func (f *File) Close() (err error) {
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
-func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
-	return newFile(r, nil, loadAddress, hasMusl)
+func NewFile(path string, r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
+	return newFile(path, r, nil, loadAddress, hasMusl)
 }
 
-func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) (*File, error) {
+func newFile(path string, r io.ReaderAt, closer io.Closer,
+	loadAddress uint64, hasMusl bool) (*File, error) {
 	f := &File{
 		elfReader:  r,
+		filePath:   path,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
 	}
@@ -881,4 +893,50 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 // IsGolang determines if this ELF is a Golang executable
 func (f *File) IsGolang() bool {
 	return f.Section(".go.buildinfo") != nil || f.Section(".gopclntab") != nil
+}
+
+func (f *File) FilePath() (string, error) {
+	if f.InsideCore {
+		return "", errors.New("file path not available for ELF inside coredump")
+	}
+	return f.filePath, nil
+}
+
+// HasDWARFData is a copy of pfelf.HasDWARFData, but for the libpf.File interface.
+func (f *File) HasDWARFData() bool {
+	hasBuildID := false
+	hasDebugStr := false
+	for _, section := range f.Sections {
+		// NOBITS indicates that the section is actually empty, regardless of the size in the
+		// section header.
+		if section.Type == elf.SHT_NOBITS {
+			continue
+		}
+
+		if section.Name == buildIDSectionName {
+			hasBuildID = true
+		}
+
+		if slices.Contains(debugStrSectionNames, section.Name) {
+			hasDebugStr = section.Size > 0
+		}
+
+		// Some files have suspicious near-empty, partially stripped sections; consider them as not
+		// having DWARF data.
+		// The simplest binary gcc 10 can generate ("return 0") has >= 48 bytes for each section.
+		// Let's not worry about executables that may not verify this, as they would not be of
+		// interest to us.
+		if section.Size < 32 {
+			continue
+		}
+
+		if slices.Contains(debugInfoSectionNames, section.Name) {
+			return true
+		}
+	}
+
+	// Some alternate debug files only have a .debug_str section. For these we want to return true.
+	// Use the absence of program headers and presence of a Build ID as heuristic to identify
+	// alternate debug files.
+	return len(f.Progs) == 0 && hasBuildID && hasDebugStr
 }

@@ -42,6 +42,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 )
 
 /*
@@ -200,8 +201,8 @@ func collectIntervalCacheMetrics(ctx context.Context, cache nativeunwind.Interva
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured
 // path.
-func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
-	includeTracers []bool, filterErrorFrames bool) (*Tracer, error) {
+func NewTracer(ctx context.Context, rep reporter.SymbolReporter, uploader symbolication.Uploader,
+	intervals Intervals, includeTracers []bool, filterErrorFrames bool) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
@@ -236,7 +237,7 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
 	processManager, err := pm.New(ctx, includeTracers, intervals.MonitorInterval(), ebpfHandler,
-		nil, rep, localStackDeltaProvider, filterErrorFrames)
+		nil, rep, uploader, localStackDeltaProvider, filterErrorFrames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}

@@ -45,6 +45,7 @@ DD_API_KEY=your-api-key # required
 DD_SITE=datadoghq.com # optional, defaults to "datadoghq.com"
 OTEL_PROFILING_AGENT_SERVICE=my-service # optional, defaults to "otel-profiling-agent-dev"
 OTEL_PROFILING_AGENT_REPORTER_INTERVAL=10s # optional, defaults to 60s
+DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD=true # optional, defaults to false
 ```
 
 Then, you can run the agent with the following command:

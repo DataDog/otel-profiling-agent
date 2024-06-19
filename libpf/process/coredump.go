@@ -564,5 +564,5 @@ func (cf *CoredumpFile) ReadAt(p []byte, addr int64) (int, error) {
 // The returned `pfelf.File` is borrowing the coredump file. Closing it will not close the
 // underlying CoredumpFile.
 func (cf *CoredumpFile) OpenELF() (*pfelf.File, error) {
-	return pfelf.NewFile(cf, cf.Base, cf.parent.hasMusl)
+	return pfelf.NewFile(cf.Name, cf, cf.Base, cf.parent.hasMusl)
 }
