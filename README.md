@@ -33,6 +33,18 @@ sudo otel-profiling-agent -tags 'service:myservice;remote_symbols:yes' -collecti
 
 For this to work you need to run a Datadog agent that listens for APM traffic at `localhost:8126`. If your agent is reachable under a different address, you can modify the `-collection-agent` parameter accordingly.
 
+## Configuration
+
+### Local symbol upload (Experimental)
+
+For compiled languages (C/C++/Rust/Go), the profiling-agent can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binairies).
+
+To enable local symbol upload:
+1. Set the `DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD` environment variable to `true`.
+2. Provide a Datadog API key through the `DD_API_KEY` environment variable.
+3. Set the `DD_SITE` environment variable to [your Datadog site](https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site) (e.g. `datadoghq.com`).
+
+
 ## Development
 
 A `docker-compose.yml` file is provided to help run the agent in a container for local development.
