@@ -5,10 +5,8 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -68,17 +66,16 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 	// If the ELF file is not found, we ignore it
 	// This can happen for short-lived processes that are already gone by the time
 	// we try to upload symbols
-	if errors.Is(err, fs.ErrNotExist) {
-		log.Debugf("Skipping executable %s as it does not exist", fileName)
-		return nil
-	}
 	if err != nil {
-		return fmt.Errorf("could not get ELF: %w", err)
+		log.Debugf("Skipping symbol upload for executable %s: %v",
+			fileName, err)
+		return nil
 	}
 
 	// We only upload symbols for executables that have DWARF data
 	if !ef.HasDWARFData() {
-		log.Debugf("Skipping executable %s as it does not have DWARF data", fileName)
+		log.Debugf("Skipping symbol upload for executable %s as it does not have DWARF data",
+			fileName)
 		return nil
 	}
 

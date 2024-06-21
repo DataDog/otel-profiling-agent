@@ -37,7 +37,7 @@ For this to work you need to run a Datadog agent that listens for APM traffic at
 
 ### Local symbol upload (Experimental)
 
-For compiled languages (C/C++/Rust/Go), the profiling-agent can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binairies).
+For compiled languages (C/C++/Rust/Go), the profiling-agent can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binaries).
 
 To enable local symbol upload:
 1. Set the `DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD` environment variable to `true`.
