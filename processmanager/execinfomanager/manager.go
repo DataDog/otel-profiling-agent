@@ -7,16 +7,14 @@
 package execinfomanager
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	log "github.com/sirupsen/logrus"
-
-	lru "github.com/elastic/go-freelru"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
@@ -234,14 +232,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(hostFileID host.FileID, fileID lib
 
 	// Processing symbols for upload can take a while, so we release the lock
 	// before doing this.
-	// We also use a timeout to avoid blocking the process manager for too long.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	err = mgr.uploader.HandleExecutable(ctx, elfRef, fileID)
-	if err != nil {
-		log.Errorf("Failed to handle executable %v: %v", elfRef.FileName(), err)
-	}
+	mgr.uploader.HandleExecutable(elfRef, fileID)
 
 	return info.ExecutableInfo, nil
 }

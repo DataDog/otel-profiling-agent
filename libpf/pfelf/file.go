@@ -56,6 +56,8 @@ const (
 var debugStrSectionNames = []string{".debug_str", ".zdebug_str", ".debug_str.dwo"}
 var debugInfoSectionNames = []string{".debug_info", ".zdebug_info"}
 
+var globalDebugDirectories = []string{"/usr/lib/debug"}
+
 // ErrSymbolNotFound is returned when requested symbol was not found
 var ErrSymbolNotFound = errors.New("symbol not found")
 
@@ -604,6 +606,37 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 	return nil
 }
 
+// OpenDebugBuildID tries to locate and open the corresponding debug ELF for this DSO
+// based on its BuildID.
+func (f *File) OpenDebugBuildID(elfOpener ELFOpener) (
+	debugELF *File, debugFile string) {
+	buildID, err := f.GetBuildID()
+	if err != nil || len(buildID) < 2 {
+		return nil, ""
+	}
+
+	// Try to find the debug file
+	debugDirectories := make([]string, 0, len(globalDebugDirectories))
+	for _, dir := range globalDebugDirectories {
+		debugDirectories = append(debugDirectories, filepath.Join(dir, ".build-id"))
+	}
+
+	for _, debugPath := range debugDirectories {
+		debugFile = filepath.Join(debugPath, buildID[:2], buildID[2:]+".debug")
+		debugELF, err = elfOpener.OpenELF(debugFile)
+		if err != nil {
+			continue
+		}
+		debugBuildID, err := debugELF.GetBuildID()
+		if err != nil || buildID != debugBuildID {
+			debugELF.Close()
+			continue
+		}
+		return debugELF, debugFile
+	}
+	return nil, ""
+}
+
 // GetDebugLink reads and parses the .gnu_debuglink section.
 // If the link does not exist then ErrNoDebugLink is returned.
 func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
@@ -626,13 +659,23 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	linkName, linkCRC32, err := f.GetDebugLink()
 	if err != nil {
 		// Treat missing or corrupt tag as soft error.
-		return
+		return nil, ""
 	}
 
 	// Try to find the debug file
 	executablePath := filepath.Dir(elfFilePath)
-	for _, debugPath := range []string{"/usr/lib/debug/"} {
-		debugFile = filepath.Join(debugPath, executablePath, linkName)
+
+	debugDirectories := []string{
+		executablePath,
+		filepath.Join(executablePath, ".debug"),
+	}
+	for _, dir := range globalDebugDirectories {
+		debugDirectories = append(debugDirectories,
+			filepath.Join(dir, executablePath))
+	}
+
+	for _, debugPath := range debugDirectories {
+		debugFile = filepath.Join(debugPath, linkName)
 		debugELF, err = elfOpener.OpenELF(debugFile)
 		if err != nil {
 			continue
@@ -648,7 +691,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 		}
 		return debugELF, debugFile
 	}
-	return
+	return nil, ""
 }
 
 // CRC32 calculates the .gnu_debuglink compatible CRC-32 of the ELF file
