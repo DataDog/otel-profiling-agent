@@ -95,10 +95,10 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 		return nil
 	}
 
-	// We only upload symbols for executables that have DWARF data
-	if !ef.HasDWARFData() {
-		log.Debugf("Skipping symbol upload for executable %s as it does not have DWARF data",
-			fileName)
+	// This needs to be done synchronously before the process manager closes the elfRef
+	inputFilePath := localDebugSymbolsPath(ef, elfRef)
+	if inputFilePath == "" {
+		log.Debugf("Skipping symbol upload for executable %s: no debug symbols found", fileName)
 		return nil
 	}
 
@@ -107,10 +107,6 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 		return err
 	}
 
-	inputFilePath, err := ef.FilePath()
-	if err != nil {
-		return fmt.Errorf("failed to get ELF file path: %w", err)
-	}
 
 	symbolFile, err := os.CreateTemp("", "objcopy-debug")
 	if err != nil {
@@ -287,4 +283,56 @@ func (d *DatadogUploader) buildSymbolUploadRequest(ctx context.Context, symbolFi
 	r.Header.Set("Content-Type", mw.FormDataContentType())
 	r.Header.Set("Content-Encoding", "gzip")
 	return r, nil
+}
+
+// localDebugSymbolsPath returns the path to the local debug symbols for the given ELF file.
+func localDebugSymbolsPath(ef *pfelf.File, elfRef *pfelf.Reference) string {
+	fileName := elfRef.FileName()
+
+	filePath, err := debugSymbolsPathForElf(ef, fileName)
+	if err != nil {
+		log.Debugf("ELF symbols not found in %s: %v", fileName, err)
+	} else {
+		return filePath
+	}
+
+	// Check if there is a separate debug ELF file for this executable
+	// following the same order as GDB
+	// https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html
+
+	// First, check based on the GNU build ID
+	debugElf, debugFile := ef.OpenDebugBuildID(elfRef)
+	if debugElf != nil {
+		filePath, err = debugSymbolsPathForElf(debugElf, debugFile)
+		if err != nil {
+			log.Debugf("ELF symbols not found in %s: %v", debugFile, err)
+		} else {
+			return filePath
+		}
+	}
+
+	// Then, check based on the debug link
+	debugElf, debugFile = ef.OpenDebugLink(elfRef.FileName(), elfRef)
+
+	if debugElf != nil {
+		filePath, err = debugSymbolsPathForElf(debugElf, debugFile)
+		if err != nil {
+			log.Debugf("ELF symbols not found in %s: %v", debugFile, err)
+		} else {
+			return filePath
+		}
+	}
+
+	return ""
+}
+
+func debugSymbolsPathForElf(ef *pfelf.File, fileName string) (string, error) {
+	filePath, err := ef.FilePath()
+	if err != nil {
+		return "", fmt.Errorf("failed to get ELF file path for executable %s: %v", fileName, err)
+	}
+	if !ef.HasDWARFData() {
+		return "", fmt.Errorf("executable %s does not have DWARF data", fileName)
+	}
+	return filePath, nil
 }
