@@ -28,6 +28,8 @@ const binaryCacheSize = 1000
 
 const sourceMapEndpoint = "/api/v2/srcmap"
 
+const uploadTimeout = 10 * time.Second
+
 type DatadogUploader struct {
 	ddAPIKey  string
 	intakeURL string
@@ -75,8 +77,7 @@ func NewDatadogUploader() (Uploader, error) {
 	}, nil
 }
 
-func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Reference,
-	fileID libpf.FileID) error {
+func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID) error {
 	_, ok := d.uploadCache.Peek(fileID)
 	if ok {
 		log.Debugf("Skipping symbol upload for executable %s: already uploaded",
@@ -107,17 +108,6 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 		return err
 	}
 
-
-	symbolFile, err := os.CreateTemp("", "objcopy-debug")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-
-	err = d.copySymbols(ctx, inputFilePath, symbolFile.Name())
-	if err != nil {
-		return fmt.Errorf("failed to copy symbols: %w", err)
-	}
-
 	d.uploadCache.Add(fileID, struct{}{})
 	// TODO:
 	// This will launch a goroutine to upload the symbols, per executable
@@ -125,20 +115,21 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 	// if there are many executables.
 	// Ideally, we should limit the number of concurrent uploads
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+		defer cancel()
+
 		if d.dryRun {
 			log.Infof("Dry run: would upload symbols %s for executable: %s", inputFilePath, e)
 			return
 		}
 
-		err = d.uploadSymbols(symbolFile, e)
+		err = d.handleSymbols(ctx, inputFilePath, e)
 		if err != nil {
-			log.Errorf("Failed to upload symbols: %v for executable: %s", err, e)
 			d.uploadCache.Remove(fileID)
+			log.Errorf("Failed to handle symbols: %v for executable: %s", err, e)
 		} else {
 			log.Infof("Symbols uploaded successfully for executable: %s", e)
 		}
-		symbolFile.Close()
-		os.Remove(symbolFile.Name())
 	}()
 
 	return nil
@@ -189,6 +180,28 @@ func (e *executableMetadata) String() string {
 	)
 }
 
+func (d *DatadogUploader) handleSymbols(ctx context.Context, symbolPath string,
+	e *executableMetadata) error {
+	symbolFile, err := os.CreateTemp("", "objcopy-debug")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file to extract symbols: %w", err)
+	}
+	defer os.Remove(symbolFile.Name())
+	defer symbolFile.Close()
+
+	err = d.copySymbols(ctx, symbolPath, symbolFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to copy symbols: %w", err)
+	}
+
+	err = d.uploadSymbols(ctx, symbolFile, e)
+	if err != nil {
+		return fmt.Errorf("failed to upload symbols: %w", err)
+	}
+
+	return nil
+}
+
 func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath string) error {
 	args := []string{
 		"--only-keep-debug",
@@ -203,10 +216,8 @@ func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath
 	return nil
 }
 
-func (d *DatadogUploader) uploadSymbols(symbolFile *os.File, e *executableMetadata) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+func (d *DatadogUploader) uploadSymbols(ctx context.Context, symbolFile *os.File,
+	e *executableMetadata) error {
 	req, err := d.buildSymbolUploadRequest(ctx, symbolFile, e)
 	if err != nil {
 		return fmt.Errorf("failed to build symbol upload request: %w", err)

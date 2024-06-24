@@ -7,11 +7,12 @@
 package execinfomanager
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"time"
+
+	log "github.com/sirupsen/logrus"
+	"go.uber.org/multierr"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
@@ -33,8 +34,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/support"
 	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/tpbase"
-	log "github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 )
 
 const (
@@ -192,11 +191,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(hostFileID host.FileID, fileID lib
 
 	// Processing symbols for upload can take a while, so we release the lock
 	// before doing this.
-	// We also use a timeout to avoid blocking the process manager for too long.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	err = mgr.uploader.HandleExecutable(ctx, elfRef, fileID)
+	err = mgr.uploader.HandleExecutable(elfRef, fileID)
 	if err != nil {
 		log.Errorf("Failed to handle executable %v: %v", elfRef.FileName(), err)
 	}
