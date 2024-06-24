@@ -31,6 +31,7 @@ const sourceMapEndpoint = "/api/v2/srcmap"
 type DatadogUploader struct {
 	ddAPIKey  string
 	intakeURL string
+	dryRun    bool
 
 	uploadCache *lru.SyncedLRU[libpf.FileID, struct{}]
 }
@@ -58,6 +59,8 @@ func NewDatadogUploader() (Uploader, error) {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
+	dryRun := os.Getenv("DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD_DRY_RUN") == "true"
+
 	uploadCache, err := lru.NewSynced[libpf.FileID, struct{}](binaryCacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -66,6 +69,7 @@ func NewDatadogUploader() (Uploader, error) {
 	return &DatadogUploader{
 		ddAPIKey:  ddAPIKey,
 		intakeURL: intakeURL,
+		dryRun:    dryRun,
 
 		uploadCache: uploadCache,
 	}, nil
@@ -80,6 +84,7 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 		return nil
 	}
 	fileName := elfRef.FileName()
+
 	ef, err := elfRef.GetELF()
 	// If the ELF file is not found, we ignore it
 	// This can happen for short-lived processes that are already gone by the time
@@ -124,6 +129,11 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 	// if there are many executables.
 	// Ideally, we should limit the number of concurrent uploads
 	go func() {
+		if d.dryRun {
+			log.Infof("Dry run: would upload symbols %s for executable: %s", inputFilePath, e)
+			return
+		}
+
 		err = d.uploadSymbols(symbolFile, e)
 		if err != nil {
 			log.Errorf("Failed to upload symbols: %v for executable: %s", err, e)

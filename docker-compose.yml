@@ -11,6 +11,7 @@ services:
     environment:
       DD_SITE: ${DD_SITE:-datadoghq.com}
       DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD: ${DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD:-false}
+      DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD_DRY_RUN: ${DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD_DRY_RUN:-false}
     volumes:
       - .:/agent
       - /var/run/docker.sock:/var/run/docker.sock:ro
