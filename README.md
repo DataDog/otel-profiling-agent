@@ -28,7 +28,7 @@ sudo mount -t debugfs none /sys/kernel/debug
 After that, you can start the agent as shown below:
 
 ```
-sudo otel-profiling-agent -tags 'service:myservice;remote_symbols:yes' -collection-agent "http://localhost:8126" -reporter-interval 60s -samples-per-second 20
+sudo otel-profiling-agent -tags 'service:myservice' -collection-agent "http://localhost:8126" -reporter-interval 60s -samples-per-second 20
 ```
 
 For this to work you need to run a Datadog agent that listens for APM traffic at `localhost:8126`. If your agent is reachable under a different address, you can modify the `-collection-agent` parameter accordingly.
