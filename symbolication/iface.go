@@ -6,5 +6,5 @@ import (
 )
 
 type Uploader interface {
-	HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID) error
+	HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID)
 }

@@ -191,10 +191,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(hostFileID host.FileID, fileID lib
 
 	// Processing symbols for upload can take a while, so we release the lock
 	// before doing this.
-	err = mgr.uploader.HandleExecutable(elfRef, fileID)
-	if err != nil {
-		log.Errorf("Failed to handle executable %v: %v", elfRef.FileName(), err)
-	}
+	mgr.uploader.HandleExecutable(elfRef, fileID)
 
 	return info.ExecutableInfo, nil
 }

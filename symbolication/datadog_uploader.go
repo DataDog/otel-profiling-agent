@@ -77,12 +77,12 @@ func NewDatadogUploader() (Uploader, error) {
 	}, nil
 }
 
-func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID) error {
+func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID) {
 	_, ok := d.uploadCache.Peek(fileID)
 	if ok {
 		log.Debugf("Skipping symbol upload for executable %s: already uploaded",
 			elfRef.FileName())
-		return nil
+		return
 	}
 	fileName := elfRef.FileName()
 
@@ -93,19 +93,20 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 	if err != nil {
 		log.Debugf("Skipping symbol upload for executable %s: %v",
 			fileName, err)
-		return nil
+		return
 	}
 
 	// This needs to be done synchronously before the process manager closes the elfRef
 	inputFilePath := localDebugSymbolsPath(ef, elfRef)
 	if inputFilePath == "" {
 		log.Debugf("Skipping symbol upload for executable %s: no debug symbols found", fileName)
-		return nil
+		return
 	}
 
 	e, err := newExecutableMetadata(fileName, ef, fileID)
 	if err != nil {
-		return err
+		log.Debugf("Skipping symbol upload for executable %s: %v", fileName, err)
+		return
 	}
 
 	d.uploadCache.Add(fileID, struct{}{})
@@ -131,8 +132,6 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 			log.Infof("Symbols uploaded successfully for executable: %s", e)
 		}
 	}()
-
-	return nil
 }
 
 type executableMetadata struct {
@@ -151,7 +150,7 @@ func newExecutableMetadata(fileName string, elf *pfelf.File,
 	isGolang := elf.IsGolang()
 
 	buildID, err := elf.GetBuildID()
-	// Some Go executables don't have a GNU build ID,  so we don't want to fail
+	// Some Go executables don't have a GNU build ID, so we don't want to fail
 	// if we can't get it
 	if err != nil && !isGolang {
 		return nil, fmt.Errorf("failed to get build id: %w", err)
