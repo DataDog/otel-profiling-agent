@@ -148,13 +148,17 @@ type executableMetadata struct {
 
 func newExecutableMetadata(fileName string, elf *pfelf.File,
 	fileID libpf.FileID) (*executableMetadata, error) {
+	isGolang := elf.IsGolang()
+
 	buildID, err := elf.GetBuildID()
-	if err != nil {
+	// Some Go executables don't have a GNU build ID,  so we don't want to fail
+	// if we can't get it
+	if err != nil && !isGolang {
 		return nil, fmt.Errorf("failed to get build id: %w", err)
 	}
 
 	goBuildID := ""
-	if elf.IsGolang() {
+	if isGolang {
 		goBuildID, err = elf.GetGoBuildID()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get go build id: %w", err)
