@@ -320,7 +320,7 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	for _, attr := range customAttributes {
 		tags = append(tags, "ddprof.custom_ctx:"+attr)
 	}
-	tags = append(tags, "runtime:native", "cpu_arch:"+runtime.GOARCH)
+	tags = append(tags, "runtime:native", "remote_symbols:yes", "cpu_arch:"+runtime.GOARCH)
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
 	for _, tag := range tags {
