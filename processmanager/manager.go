@@ -28,6 +28,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 )
 
 const (
@@ -63,7 +64,8 @@ var (
 // the default implementation.
 func New(ctx context.Context, includeTracers []bool, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
+	uploader symbolication.Uploader, sdp nativeunwind.StackDeltaProvider,
+	filterErrorFrames bool) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -79,7 +81,7 @@ func New(ctx context.Context, includeTracers []bool, monitorInterval time.Durati
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	em := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em := eim.NewExecutableInfoManager(sdp, uploader, ebpf, includeTracers)
 
 	interpreters := make(map[libpf.PID]map[libpf.OnDiskFileIdentifier]interpreter.Instance)
 

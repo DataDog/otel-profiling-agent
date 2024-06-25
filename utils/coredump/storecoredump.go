@@ -54,7 +54,7 @@ func (scd *StoreCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtClo
 func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	file, err := scd.openFile(path)
 	if err == nil {
-		return pfelf.NewFile(file, 0, false)
+		return pfelf.NewFile(path, file, 0, false)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -70,7 +70,7 @@ func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, mod
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump file reader: %w", err)
 	}
-	coreELF, err := pfelf.NewFile(reader, 0, false)
+	coreELF, err := pfelf.NewFile("", reader, 0, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump ELF: %w", err)
 	}

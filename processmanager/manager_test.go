@@ -32,6 +32,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/metrics"
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 )
 
 // dummyProcess implements pfelf.Process for testing purposes
@@ -302,6 +303,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 				true)
 			if err != nil {
 				t.Fatalf("Failed to initialize new process manager: %v", err)
@@ -400,6 +402,7 @@ func TestNewMapping(t *testing.T) {
 				ebpfMockup,
 				NewMapFileIDMapper(),
 				nil,
+				symbolication.NewNoopUploader(),
 				&dummyProvider,
 				true)
 			if err != nil {
@@ -598,6 +601,7 @@ func TestProcExit(t *testing.T) {
 				ebpfMockup,
 				NewMapFileIDMapper(),
 				nil,
+				symbolication.NewNoopUploader(),
 				&dummyProvider,
 				true)
 			if err != nil {

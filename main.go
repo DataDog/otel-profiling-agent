@@ -28,6 +28,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
 
+	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/tracer"
 
 	log "github.com/sirupsen/logrus"
@@ -333,8 +334,23 @@ func mainWithExitCode() exitCode {
 	// Start reporter metric reporting with 60 second intervals.
 	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
+	uploader := symbolication.NewNoopUploader()
+
+	ddSymbolUpload := os.Getenv("DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD")
+	if ddSymbolUpload == "true" {
+		log.Infof("Enabling Datadog local symbol upload")
+		uploader, err = symbolication.NewDatadogUploader()
+		if err != nil {
+			log.Errorf(
+				"Failed to create Datadog symbol uploader, symbol upload will be disabled: %v",
+				err,
+			)
+			uploader = symbolication.NewNoopUploader()
+		}
+	}
+
 	// Load the eBPF code and map definitions
-	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !argSendErrorFrames)
+	trc, err := tracer.NewTracer(mainCtx, rep, uploader, times, includeTracers, !argSendErrorFrames)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to load eBPF tracer: %s", err)
 		log.Error(msg)
