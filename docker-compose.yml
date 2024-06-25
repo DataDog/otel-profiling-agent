@@ -8,6 +8,9 @@ services:
         - arch=${ARCH:?error}
     privileged: true
     pid: "host"
+    environment:
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD: ${DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD:-false}
     volumes:
       - .:/agent
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -26,7 +29,7 @@ services:
       - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
     secrets:
       - dd-api-key
-    entrypoint: [ '/bin/sh', '-c', 'export DD_API_KEY=$$(cat /run/secrets/dd-api-key) ; /bin/entrypoint.sh' ]
+    entrypoint: ['/bin/sh', '-c', 'export DD_API_KEY=$$(cat /run/secrets/dd-api-key) ; /bin/entrypoint.sh']
 
 secrets:
   dd-api-key:

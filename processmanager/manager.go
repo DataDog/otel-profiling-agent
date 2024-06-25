@@ -29,6 +29,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 	"github.com/elastic/otel-profiling-agent/traceutil"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -68,7 +69,8 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers config.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
+	uploader symbolication.Uploader, sdp nativeunwind.StackDeltaProvider,
+	filterErrorFrames bool) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -84,7 +86,7 @@ func New(ctx context.Context, includeTracers config.IncludedTracers, monitorInte
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, uploader, ebpf, includeTracers)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}

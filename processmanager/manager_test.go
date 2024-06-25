@@ -31,6 +31,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/traceutil"
 	"github.com/elastic/otel-profiling-agent/util"
 
@@ -322,6 +323,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				nil,
 				&symbolReporterMockup{},
 				nil,
+				nil,
 				true)
 			require.NoError(t, err)
 
@@ -416,6 +418,7 @@ func TestNewMapping(t *testing.T) {
 				ebpfMockup,
 				NewMapFileIDMapper(),
 				symRepMockup,
+				symbolication.NewNoopUploader(),
 				&dummyProvider,
 				true)
 			require.NoError(t, err)
@@ -606,6 +609,7 @@ func TestProcExit(t *testing.T) {
 				ebpfMockup,
 				NewMapFileIDMapper(),
 				repMockup,
+				symbolication.NewNoopUploader(),
 				&dummyProvider,
 				true)
 			require.NoError(t, err)

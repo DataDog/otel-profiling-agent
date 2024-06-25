@@ -7,6 +7,7 @@
 package execinfomanager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -35,6 +36,7 @@ import (
 	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/tpbase"
 	"github.com/elastic/otel-profiling-agent/util"
 )
@@ -90,6 +92,9 @@ type ExecutableInfoManager struct {
 	// sdp allows fetching stack deltas for executables.
 	sdp nativeunwind.StackDeltaProvider
 
+	// uploader is used to upload symbolication data.
+	uploader symbolication.Uploader
+
 	// state bundles up all mutable state of the manager.
 	state xsync.RWMutex[executableInfoManagerState]
 
@@ -101,6 +106,7 @@ type ExecutableInfoManager struct {
 // NewExecutableInfoManager creates a new instance of the executable info manager.
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
+	uploader symbolication.Uploader,
 	ebpf pmebpf.EbpfHandler,
 	includeTracers config.IncludedTracers,
 ) (*ExecutableInfoManager, error) {
@@ -138,7 +144,8 @@ func NewExecutableInfoManager(
 	deferredFileIDs.SetLifetime(deferredFileIDTimeout)
 
 	return &ExecutableInfoManager{
-		sdp: sdp,
+		sdp:      sdp,
+		uploader: uploader,
 		state: xsync.NewRWMutex(executableInfoManagerState{
 			interpreterLoaders: interpreterLoaders,
 			executables:        map[host.FileID]*entry{},
@@ -154,9 +161,9 @@ func NewExecutableInfoManager(
 //
 // The return value is copied instead of returning a pointer in order to spare us the use
 // of getters and more complicated locking semantics.
-func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
+func (mgr *ExecutableInfoManager) AddOrIncRef(hostFileID host.FileID, fileID libpf.FileID,
 	elfRef *pfelf.Reference) (ExecutableInfo, error) {
-	if _, exists := mgr.deferredFileIDs.Get(fileID); exists {
+	if _, exists := mgr.deferredFileIDs.Get(hostFileID); exists {
 		return ExecutableInfo{}, ErrDeferredFileID
 	}
 	var (
@@ -169,7 +176,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 
 	// Fast path for executable info that is already present.
 	state := mgr.state.WLock()
-	info, ok := state.executables[fileID]
+	info, ok := state.executables[hostFileID]
 	if ok {
 		defer mgr.state.WUnlock(&state)
 		info.rc++
@@ -180,10 +187,11 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// so we release the lock before doing this.
 	mgr.state.WUnlock(&state)
 
-	if err = mgr.sdp.GetIntervalStructuresForFile(fileID, elfRef, &intervalData); err != nil {
+	if err = mgr.sdp.GetIntervalStructuresForFile(hostFileID, elfRef, &intervalData); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			mgr.deferredFileIDs.Add(fileID, libpf.Void{})
+			mgr.deferredFileIDs.Add(hostFileID, libpf.Void{})
 		}
+
 		return ExecutableInfo{}, fmt.Errorf("failed to extract interval data: %w", err)
 	}
 
@@ -197,21 +205,20 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Re-take the lock and check whether another thread beat us to
 	// inserting the data while we were waiting for the write lock.
 	state = mgr.state.WLock()
-	defer mgr.state.WUnlock(&state)
-	if info, ok = state.executables[fileID]; ok {
+	if info, ok = state.executables[hostFileID]; ok {
 		info.rc++
 		return info.ExecutableInfo, nil
 	}
 
 	// Load the data into BPF maps.
-	ref, gaps, err = state.loadDeltas(fileID, intervalData.Deltas)
+	ref, gaps, err = state.loadDeltas(hostFileID, intervalData.Deltas)
 	if err != nil {
-		mgr.deferredFileIDs.Add(fileID, libpf.Void{})
+		mgr.deferredFileIDs.Add(hostFileID, libpf.Void{})
 		return ExecutableInfo{}, fmt.Errorf("failed to load deltas: %w", err)
 	}
 
 	// Create the LoaderInfo for interpreter detection
-	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef, gaps)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, gaps)
 
 	// Insert a corresponding record into our map.
 	info = &entry{
@@ -222,7 +229,19 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		mapRef: ref,
 		rc:     1,
 	}
-	state.executables[fileID] = info
+	state.executables[hostFileID] = info
+	mgr.state.WUnlock(&state)
+
+	// Processing symbols for upload can take a while, so we release the lock
+	// before doing this.
+	// We also use a timeout to avoid blocking the process manager for too long.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = mgr.uploader.HandleExecutable(ctx, elfRef, fileID)
+	if err != nil {
+		log.Errorf("Failed to handle executable %v: %v", elfRef.FileName(), err)
+	}
 
 	return info.ExecutableInfo, nil
 }

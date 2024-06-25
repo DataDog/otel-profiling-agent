@@ -19,10 +19,10 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	hostmeta "github.com/elastic/otel-profiling-agent/hostmetadata/host"
+	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/rlimit"
 	"github.com/elastic/otel-profiling-agent/support"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -137,7 +137,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 
 	enabledTracers, _ := config.ParseTracers("")
 	enabledTracers.Enable(config.PythonTracer)
-	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false)
+	tracer, err := NewTracer(ctx, &mockReporter{}, nil, &mockIntervals{}, enabledTracers, false)
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)

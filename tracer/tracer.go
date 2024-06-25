@@ -43,6 +43,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/rlimit"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/symbolication"
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 	"github.com/elastic/otel-profiling-agent/util"
 )
@@ -229,8 +230,9 @@ func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
-func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
-	includeTracers config.IncludedTracers, filterErrorFrames bool) (*Tracer, error) {
+func NewTracer(ctx context.Context, rep reporter.SymbolReporter, uploader symbolication.Uploader,
+	intervals Intervals, includeTracers config.IncludedTracers,
+	filterErrorFrames bool) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
@@ -251,7 +253,7 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
 	processManager, err := pm.New(ctx, includeTracers, intervals.MonitorInterval(), ebpfHandler,
-		nil, rep, elfunwindinfo.NewStackDeltaProvider(), filterErrorFrames)
+		nil, rep, uploader, elfunwindinfo.NewStackDeltaProvider(), filterErrorFrames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}

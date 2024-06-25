@@ -248,7 +248,7 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to extract VDSO: %v", err)
 			}
-			return pfelf.NewFile(vdso, 0, false)
+			return pfelf.NewFile(file, vdso, 0, false)
 		}
 		return pfelf.Open(sp.getMappingFile(m))
 	}
