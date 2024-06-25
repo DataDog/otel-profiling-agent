@@ -345,6 +345,7 @@ func mainWithExitCode() exitCode {
 				"Failed to create Datadog symbol uploader, symbol upload will be disabled: %v",
 				err,
 			)
+			uploader = symbolication.NewNoopUploader()
 		}
 	}
 
