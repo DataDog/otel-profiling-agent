@@ -67,6 +67,7 @@ type traceFramesCounts struct {
 	containerName  string
 	apmServiceName string
 	pid            util.PID
+	tid            util.TID
 	timestamps     []uint64 // in nanoseconds
 }
 
@@ -125,7 +126,7 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	timestamp libpf.UnixTime64, comm, podName, containerID,
-	containerName, apmServiceName string, pid util.PID) {
+	containerName, apmServiceName string, pid util.PID, tid util.TID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -145,6 +146,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		containerName:  containerName,
 		apmServiceName: apmServiceName,
 		pid:            pid,
+		tid:            tid,
 		timestamps:     []uint64{uint64(timestamp)},
 	}
 }
@@ -708,6 +710,7 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 	addAttr(semconv.ThreadNameKey, i.comm)
 	addAttr(semconv.ServiceNameKey, i.apmServiceName)
 	addAttr("process_id", strconv.Itoa(int(i.pid)))
+	addAttr(semconv.ThreadIDKey, strconv.Itoa(int(i.tid)))
 
 	return indices
 }

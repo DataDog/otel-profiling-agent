@@ -516,6 +516,8 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
 typedef struct Trace {
   // The process ID
   u32 pid;
+  // The thread ID
+  u32 tid;
   // Monotonic kernel time in nanosecond precision.
   u64 ktime;
   // The current COMM of the thread of this Trace.

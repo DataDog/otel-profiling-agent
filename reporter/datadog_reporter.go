@@ -75,7 +75,8 @@ type DatadogReporter struct {
 
 // ReportTraceEvent enqueues reported trace events for the Datadog reporter.
 func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-	comm, podName, containerID, containerName, apmServiceName string, pid util.PID) {
+	comm, podName, containerID, containerName, apmServiceName string,
+	pid util.PID, tid util.TID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -95,6 +96,7 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.U
 		containerName:  containerName,
 		apmServiceName: apmServiceName,
 		pid:            pid,
+		tid:            tid,
 		timestamps:     []uint64{uint64(timestamp)},
 	}
 }
@@ -566,6 +568,13 @@ func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
 
 	if i.pid != 0 {
 		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
+	}
+
+	if i.tid != 0 {
+		// The naming has an impact on the backend side,
+		// this is why we use "thread id" instead of "thread_id"
+		// This is also consistent with ddprof.
+		labels["thread id"] = append(labels["thread id"], fmt.Sprintf("%d", i.tid))
 	}
 }
 

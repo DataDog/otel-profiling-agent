@@ -81,6 +81,7 @@ type TraceAndCounts struct {
 	ContainerName  string
 	APMServiceName string
 	PID            util.PID
+	TID            util.TID
 }
 
 type FrameMetadata struct {

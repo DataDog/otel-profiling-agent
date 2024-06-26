@@ -55,6 +55,7 @@ type Trace struct {
 	Hash             TraceHash
 	KTime            util.KTime
 	PID              util.PID
+	TID              util.TID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
 }

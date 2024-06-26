@@ -41,7 +41,8 @@ type TraceReporter interface {
 	// and caches it for reporting to the backend. It returns true if the event was
 	// enqueued for reporting, and false if the event was ignored.
 	ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-		comm, podName, containerID, containerName, apmServiceName string, pid util.PID)
+		comm, podName, containerID, containerName, apmServiceName string,
+		pid util.PID, tid util.TID)
 
 	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
 	// via ReportTraceEvent().

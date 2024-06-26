@@ -25,6 +25,9 @@ func (p PID) Hash32() uint32 {
 	return uint32(p)
 }
 
+// TID represent a thread ID
+type TID int32
+
 // HashString turns a string into a 64-bit hash.
 func HashString(s string) uint64 {
 	h := fnv.New64a()
