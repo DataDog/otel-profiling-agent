@@ -68,7 +68,7 @@ func buildMultipartForm(profiles []profileData, startTime, endTime time.Time,
 	mw := multipart.NewWriter(&buf)
 
 	event := &uploadEvent{
-		Version: "0.0.1-dd",
+		Version: "4",
 		Family:  "native",
 		Start:   startTime.Format(time.RFC3339Nano),
 		End:     endTime.Format(time.RFC3339Nano),
