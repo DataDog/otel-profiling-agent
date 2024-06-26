@@ -582,7 +582,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	}
 	for _, dir := range globalDebugDirectories {
 		debugDirectories = append(debugDirectories,
-			filepath.Join(dir, filepath.Base(executablePath)))
+			filepath.Join(dir, executablePath))
 	}
 
 	for _, debugPath := range debugDirectories {
