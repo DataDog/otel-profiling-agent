@@ -12,6 +12,8 @@ import (
 	"net/textproto"
 	"strings"
 	"time"
+
+	"github.com/elastic/otel-profiling-agent/vc"
 )
 
 type profileData struct {
@@ -36,6 +38,8 @@ func uploadProfiles(ctx context.Context, profiles []profileData, startTime, endT
 		return err
 	}
 	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("DD-EVP-ORIGIN", profilerName)
+	req.Header.Set("DD-EVP-ORIGIN-VERSION", vc.Version())
 
 	// If you're uploading directly to our intake, add the API key here:
 	// req.Header.Set("DD-API-KEY", "xxxx")
@@ -68,7 +72,7 @@ func buildMultipartForm(profiles []profileData, startTime, endTime time.Time,
 	mw := multipart.NewWriter(&buf)
 
 	event := &uploadEvent{
-		Version: "0.0.1-dd",
+		Version: "4",
 		Family:  "native",
 		Start:   startTime.Format(time.RFC3339Nano),
 		End:     endTime.Format(time.RFC3339Nano),

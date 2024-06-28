@@ -26,11 +26,13 @@ import (
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
 	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/elastic/otel-profiling-agent/vc"
 )
 
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*DatadogReporter)(nil)
 
+const profilerName = "dd-otel-profiling-agent"
 const profilingEndPoint = "/profiling/v1/input"
 
 // DatadogReporter receives and transforms information to be OTLP/profiles compliant.
@@ -320,7 +322,12 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	for _, attr := range customAttributes {
 		tags = append(tags, "ddprof.custom_ctx:"+attr)
 	}
-	tags = append(tags, "runtime:native", "remote_symbols:yes", "cpu_arch:"+runtime.GOARCH)
+	// The profiler_name tag allows us to differentiate the source of the profiles.
+	tags = append(tags, "runtime:native", "remote_symbols:yes",
+		"profiler_name:"+profilerName,
+		"profiler_version:"+vc.Version(),
+		"cpu_arch:"+runtime.GOARCH,
+	)
 	foundService := false
 	// check if service tag is set, if not set it to otel-profiling-agent
 	for _, tag := range tags {
