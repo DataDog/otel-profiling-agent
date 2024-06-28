@@ -350,7 +350,9 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	for _, attr := range customAttributes {
 		tags = append(tags, fmt.Sprintf("ddprof.custom_ctx:%s", attr))
 	}
+	// The profiler_name tag allows us to differentiate the source of the profiles.
 	tags = append(tags, "runtime:native", "remote_symbols:yes",
+		"profiler_name:dd-otel-profiling-agent",
 		fmt.Sprintf("cpu_arch:%s", runtime.GOARCH),
 	)
 	foundService := false
