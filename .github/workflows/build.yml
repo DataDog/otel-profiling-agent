@@ -4,12 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
   workflow_call:
 
 jobs:
   lint:
     name: Lint
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'publish-dev-test') }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
@@ -65,6 +67,7 @@ jobs:
 
   test:
     name: Test
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'publish-dev-test') }}
     strategy:
       fail-fast: true
       max-parallel: 2
@@ -126,6 +129,7 @@ jobs:
 
   build-integration-test-binaries:
     name: Build integration test binaries
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'publish-dev-test') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -160,6 +164,7 @@ jobs:
     name: Integration tests (kernel v${{ matrix.kernel-version }})
     runs-on: ubuntu-24.04
     needs: build-integration-test-binaries
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'publish-dev-test') }}
     strategy:
       matrix:
         kernel-version: [ "4.19.314", "5.4.276", "5.10.217", "5.15.159", "6.1.91", "6.6.31", "6.8.10", "6.9.1" ]
@@ -188,8 +193,11 @@ jobs:
           support/run-tests.sh ${{ matrix.kernel-version }}
 
   build:
+    env:
+      RELEASE_VERSION: ${{ (github.ref_name == 'main' && 'dev') || (github.event_name != 'pull_request' && github.ref_name) || github.head_ref }}
     name: Build
     needs: [ test, lint, integration-tests ]
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.action != 'labeled') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'publish-dev-test') }}
     strategy:
       fail-fast: true
       max-parallel: 2
@@ -198,6 +206,8 @@ jobs:
         os: ["arm-4core-linux-ubuntu24.04", "ubuntu-24.04"]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set version
+        run: echo "VERSION=${RELEASE_VERSION}+`echo ${GITHUB_SHA::7}`.${{ github.run_id }}" >> $GITHUB_ENV
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc make llvm clang-16 dwz cmake curl unzip
       - name: Install Zydis
@@ -252,8 +262,8 @@ jobs:
 
   publish:
     env:
-      RELEASE_VERSION: dev
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      RELEASE_VERSION: ${{ github.event_name == 'pull_request' && 'dev-test' || 'dev' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'publish-dev-test') )}}
     name: Publish pre-release
     needs: [build]
     runs-on: ubuntu-24.04
@@ -286,7 +296,7 @@ jobs:
       - name: Create pre-release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "otel-profiling-agent-dev-*.tar.gz"
+          artifacts: otel-profiling-agent-${{ env.RELEASE_VERSION }}-*.tar.gz
           allowUpdates: true
           removeArtifacts: true
           omitBody:  true
