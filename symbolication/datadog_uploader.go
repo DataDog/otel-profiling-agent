@@ -29,9 +29,12 @@ const binaryCacheSize = 1000
 
 const sourceMapEndpoint = "/api/v2/srcmap"
 
+const uploadTimeout = 10 * time.Second
+
 type DatadogUploader struct {
 	ddAPIKey  string
 	intakeURL string
+	dryRun    bool
 
 	uploadCache *lru.SyncedLRU[libpf.FileID, struct{}]
 }
@@ -59,6 +62,8 @@ func NewDatadogUploader() (Uploader, error) {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
+	dryRun := os.Getenv("DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD_DRY_RUN") == "true"
+
 	uploadCache, err := lru.NewSynced[libpf.FileID, struct{}](binaryCacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -67,20 +72,21 @@ func NewDatadogUploader() (Uploader, error) {
 	return &DatadogUploader{
 		ddAPIKey:  ddAPIKey,
 		intakeURL: intakeURL,
+		dryRun:    dryRun,
 
 		uploadCache: uploadCache,
 	}, nil
 }
 
-func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Reference,
-	fileID libpf.FileID) error {
+func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf.FileID) {
 	_, ok := d.uploadCache.Peek(fileID)
 	if ok {
 		log.Debugf("Skipping symbol upload for executable %s: already uploaded",
 			elfRef.FileName())
-		return nil
+		return
 	}
 	fileName := elfRef.FileName()
+
 	ef, err := elfRef.GetELF()
 	// If the ELF file is not found, we ignore it
 	// This can happen for short-lived processes that are already gone by the time
@@ -88,34 +94,20 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 	if err != nil {
 		log.Debugf("Skipping symbol upload for executable %s: %v",
 			fileName, err)
-		return nil
+		return
 	}
 
-	// We only upload symbols for executables that have DWARF data
-	if !ef.HasDWARFData() {
-		log.Debugf("Skipping symbol upload for executable %s as it does not have DWARF data",
-			fileName)
-		return nil
+	// This needs to be done synchronously before the process manager closes the elfRef
+	inputFilePath := localDebugSymbolsPath(ef, elfRef)
+	if inputFilePath == "" {
+		log.Debugf("Skipping symbol upload for executable %s: no debug symbols found", fileName)
+		return
 	}
 
 	e, err := newExecutableMetadata(fileName, ef, fileID)
 	if err != nil {
-		return err
-	}
-
-	inputFilePath, err := ef.FilePath()
-	if err != nil {
-		return fmt.Errorf("failed to get ELF file path: %w", err)
-	}
-
-	symbolFile, err := os.CreateTemp("", "objcopy-debug")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-
-	err = d.copySymbols(ctx, inputFilePath, symbolFile.Name())
-	if err != nil {
-		return fmt.Errorf("failed to copy symbols: %w", err)
+		log.Debugf("Skipping symbol upload for executable %s: %v", fileName, err)
+		return
 	}
 
 	d.uploadCache.Add(fileID, struct{}{})
@@ -125,18 +117,22 @@ func (d *DatadogUploader) HandleExecutable(ctx context.Context, elfRef *pfelf.Re
 	// if there are many executables.
 	// Ideally, we should limit the number of concurrent uploads
 	go func() {
-		err = d.uploadSymbols(symbolFile, e)
+		ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+		defer cancel()
+
+		if d.dryRun {
+			log.Infof("Dry run: would upload symbols %s for executable: %s", inputFilePath, e)
+			return
+		}
+
+		err = d.handleSymbols(ctx, inputFilePath, e)
 		if err != nil {
-			log.Errorf("Failed to upload symbols: %v for executable: %s", err, e)
 			d.uploadCache.Remove(fileID)
+			log.Errorf("Failed to handle symbols: %v for executable: %s", err, e)
 		} else {
 			log.Infof("Symbols uploaded successfully for executable: %s", e)
 		}
-		symbolFile.Close()
-		os.Remove(symbolFile.Name())
 	}()
-
-	return nil
 }
 
 type executableMetadata struct {
@@ -152,13 +148,17 @@ type executableMetadata struct {
 
 func newExecutableMetadata(fileName string, elf *pfelf.File,
 	fileID libpf.FileID) (*executableMetadata, error) {
+	isGolang := elf.IsGolang()
+
 	buildID, err := elf.GetBuildID()
-	if err != nil {
+	// Some Go executables don't have a GNU build ID, so we don't want to fail
+	// if we can't get it
+	if err != nil && !isGolang {
 		return nil, fmt.Errorf("failed to get build id: %w", err)
 	}
 
 	goBuildID := ""
-	if elf.IsGolang() {
+	if isGolang {
 		goBuildID, err = elf.GetGoBuildID()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get go build id: %w", err)
@@ -184,6 +184,28 @@ func (e *executableMetadata) String() string {
 	)
 }
 
+func (d *DatadogUploader) handleSymbols(ctx context.Context, symbolPath string,
+	e *executableMetadata) error {
+	symbolFile, err := os.CreateTemp("", "objcopy-debug")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file to extract symbols: %w", err)
+	}
+	defer os.Remove(symbolFile.Name())
+	defer symbolFile.Close()
+
+	err = d.copySymbols(ctx, symbolPath, symbolFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to copy symbols: %w", err)
+	}
+
+	err = d.uploadSymbols(ctx, symbolFile, e)
+	if err != nil {
+		return fmt.Errorf("failed to upload symbols: %w", err)
+	}
+
+	return nil
+}
+
 func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath string) error {
 	args := []string{
 		"--only-keep-debug",
@@ -198,10 +220,8 @@ func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath
 	return nil
 }
 
-func (d *DatadogUploader) uploadSymbols(symbolFile *os.File, e *executableMetadata) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+func (d *DatadogUploader) uploadSymbols(ctx context.Context, symbolFile *os.File,
+	e *executableMetadata) error {
 	req, err := d.buildSymbolUploadRequest(ctx, symbolFile, e)
 	if err != nil {
 		return fmt.Errorf("failed to build symbol upload request: %w", err)
@@ -278,4 +298,56 @@ func (d *DatadogUploader) buildSymbolUploadRequest(ctx context.Context, symbolFi
 	r.Header.Set("Content-Type", mw.FormDataContentType())
 	r.Header.Set("Content-Encoding", "gzip")
 	return r, nil
+}
+
+// localDebugSymbolsPath returns the path to the local debug symbols for the given ELF file.
+func localDebugSymbolsPath(ef *pfelf.File, elfRef *pfelf.Reference) string {
+	fileName := elfRef.FileName()
+
+	filePath, err := debugSymbolsPathForElf(ef, fileName)
+	if err != nil {
+		log.Debugf("ELF symbols not found in %s: %v", fileName, err)
+	} else {
+		return filePath
+	}
+
+	// Check if there is a separate debug ELF file for this executable
+	// following the same order as GDB
+	// https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html
+
+	// First, check based on the GNU build ID
+	debugElf, debugFile := ef.OpenDebugBuildID(elfRef)
+	if debugElf != nil {
+		filePath, err = debugSymbolsPathForElf(debugElf, debugFile)
+		if err != nil {
+			log.Debugf("ELF symbols not found in %s: %v", debugFile, err)
+		} else {
+			return filePath
+		}
+	}
+
+	// Then, check based on the debug link
+	debugElf, debugFile = ef.OpenDebugLink(elfRef.FileName(), elfRef)
+
+	if debugElf != nil {
+		filePath, err = debugSymbolsPathForElf(debugElf, debugFile)
+		if err != nil {
+			log.Debugf("ELF symbols not found in %s: %v", debugFile, err)
+		} else {
+			return filePath
+		}
+	}
+
+	return ""
+}
+
+func debugSymbolsPathForElf(ef *pfelf.File, fileName string) (string, error) {
+	filePath, err := ef.FilePath()
+	if err != nil {
+		return "", fmt.Errorf("failed to get ELF file path for executable %s: %v", fileName, err)
+	}
+	if !ef.HasDWARFData() {
+		return "", fmt.Errorf("executable %s does not have DWARF data", fileName)
+	}
+	return filePath, nil
 }
