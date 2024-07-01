@@ -15,7 +15,7 @@ jobs:
       RELEASE_VERSION: ${{ github.ref_name }}
     needs: build
     name: Release
-    runs-on: ubuntu-24.04gs
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: write
