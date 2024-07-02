@@ -80,6 +80,7 @@ rules:
       - list
     resources:
       - nodes
+      - pods
     apiGroups:
       - ""
 ```
