@@ -62,7 +62,7 @@ function get_upstream_diff() {
   previous_upstream=$(git show -s --pretty=%P "${previous_first_datadog_commit}")
 
   local new_upstream
-  new_upstream=$(git show -s --pretty=%P "${new_first_datadog_commit}"^1)
+  new_upstream=$(git show -s --pretty=%P "${new_first_datadog_commit}")
 
   echo "$previous_upstream...$new_upstream"
 }
