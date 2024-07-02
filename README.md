@@ -50,6 +50,7 @@ When running the agent in a container, you need to ensure the following conditio
 * The container has the `SYS_ADMIN` capability.
 * The container has Host PID enabled (and procMount: "Unmasked").
 * The host's debugfs filesystem is mounted to the container (in read-only mode).
+* The agent is running as root inside the container.
 
 #### Container name resolution
 
