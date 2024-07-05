@@ -525,6 +525,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	profile.DurationNanos = int64(endTS - startTS)
 	profile.TimeNanos = int64(startTS)
 
+	profile = profile.Compact()
+
 	return profile, startTS, endTS
 }
 
