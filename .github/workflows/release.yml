@@ -26,10 +26,11 @@ jobs:
         run: |
           tar czf otel-profiling-agent-${RELEASE_VERSION}-aarch64.tar.gz -C agent-aarch64 .
           tar czf otel-profiling-agent-${RELEASE_VERSION}-x86_64.tar.gz -C agent-x86_64 .
+          sha256sum otel-profiling-agent-${RELEASE_VERSION}-aarch64.tar.gz otel-profiling-agent-${RELEASE_VERSION}-x86_64.tar.gz > sha256sums.txt
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "otel-profiling-agent-v*.tar.gz"
+          artifacts: "otel-profiling-agent-v*.tar.gz,sha256sum.txt"
           allowUpdates: true
           omitBody:  true
           draft: true
