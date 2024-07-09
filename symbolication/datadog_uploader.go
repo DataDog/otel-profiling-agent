@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -122,6 +123,14 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 	// if there are many executables.
 	// Ideally, we should limit the number of concurrent uploads
 	go func() {
+		_, err = os.Stat(inputFilePath)
+		if err != nil {
+			d.uploadCache.Remove(fileID)
+			log.Debugf("Skipping symbol extraction for short-lived executable %s: %v", fileName,
+				err)
+			return
+		}
+
 		if d.dryRun {
 			log.Infof("Dry run: would upload symbols %s for executable: %s", inputFilePath, e)
 			return
@@ -217,9 +226,9 @@ func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath
 		inputPath,
 		outputPath,
 	}
-	err := exec.CommandContext(ctx, "objcopy", args...).Run()
+	_, err := exec.CommandContext(ctx, "objcopy", args...).Output()
 	if err != nil {
-		return fmt.Errorf("failed to extract debug symbols: %w", err)
+		return fmt.Errorf("failed to extract debug symbols: %w", cleanCmdError(err))
 	}
 	return nil
 }
@@ -354,4 +363,19 @@ func debugSymbolsPathForElf(ef *pfelf.File, fileName string) (string, error) {
 		return "", fmt.Errorf("executable %s does not have DWARF data", fileName)
 	}
 	return filePath, nil
+}
+
+// cleanCmdError simplifies error messages from os/exec.Cmd.Run.
+// For ExitErrors, it trims and returns stderr. By default, ExitError prints the exit
+// status but not stderr.
+//
+// cleanCmdError returns other errors unmodified.
+func cleanCmdError(err error) error {
+	var xerr *exec.ExitError
+	if errors.As(err, &xerr) {
+		if stderr := strings.TrimSpace(string(xerr.Stderr)); stderr != "" {
+			return fmt.Errorf("%w: %s", err, stderr)
+		}
+	}
+	return err
 }
