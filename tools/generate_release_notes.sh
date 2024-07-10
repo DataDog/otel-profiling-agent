@@ -48,6 +48,7 @@ fi
 #   None
 # Outputs:
 #   A string with the format "upstream_commit1...upstream_commit2" that can be used as a reference to the upstream commits between the two tags
+#   If there are no changes in the upstream commits between the two tags, an empty string is returned
 #######################################
 function get_upstream_diff() {
   local first_datadog_commit_name="Add options to control reporter interval / sampling frequency"
@@ -64,7 +65,12 @@ function get_upstream_diff() {
   local new_upstream
   new_upstream=$(git show -s --pretty=%P "${new_first_datadog_commit}")
 
-  echo "$previous_upstream...$new_upstream"
+  if [ "${previous_upstream}" == "${new_upstream}" ]; then
+    echo ""
+    return
+  fi
+
+  echo "${previous_upstream}...${new_upstream}"
 }
 
 #######################################
@@ -76,6 +82,7 @@ function get_upstream_diff() {
 #   None
 # Outputs:
 #   A string with the format "commit1...commit2" that can be used as a reference to the upstream commits between the two tags
+#   If there are no changes in the upstream commits between the two tags, an empty string is returned
 #######################################
 function get_datadog_diff() {
   local previous_tag_last_commit
@@ -84,11 +91,19 @@ function get_datadog_diff() {
   local previous_tag_last_commit_name
   previous_tag_last_commit_name=$(git log -1 "${previous_tag_last_commit}" --pretty=%B | head -n+1)
 
+  # Strip out the PR number / jira ticket from the commit message since they might confuse the grep
+  previous_tag_last_commit_name=$(echo "${previous_tag_last_commit_name}" | sed -E 's/\(#[0-9]+\)//g' | sed -E 's/\[[a-zA-Z]+-[0-9]+\]//g' | sed -E 's/^\s+|\s+$//g')
+
   local new_tag_first_commit
   new_tag_first_commit=$(git log "${NEW_TAG}" --grep="${previous_tag_last_commit_name}" --pretty=format:"%H" | tail -n 1)
 
   local new_tag_commit
   new_tag_commit=$(git rev-list -n 1 "${NEW_TAG}")
+
+  if [ "${new_tag_first_commit}" == "${new_tag_commit}" ]; then
+    echo ""
+    return
+  fi
 
   echo "${new_tag_first_commit}...${new_tag_commit}"
 }
@@ -112,7 +127,9 @@ function generate_release_notes() {
 
   echo "# Major updates"
   echo -e "\n"
-  echo "* Updated upstream for otel-profiling-agent ${upstream_diff}"
+  if [ -n "${upstream_diff}" ]; then
+    echo "* Updated upstream for otel-profiling-agent ${upstream_diff}"
+  fi
   echo "* <...> fill in the major updates here <...>"
   echo -e "\n"
 
@@ -121,15 +138,24 @@ function generate_release_notes() {
   echo "<summary>Expand to see the full changelog</summary>"
   echo -e "\n"
   echo "### Upstream changes:"
-  # get rid of PR number and just show the commit hash and message
-  git log --pretty=format:"* %h %s" "${upstream_diff}" | cat | sed -E 's/\(#[0-9]+\)//g'
+  if [ -n "${upstream_diff}" ]; then
+    # get rid of PR number and just show the commit hash and message
+    git log --pretty=format:"* %h %s" "${upstream_diff}" | cat | sed -E 's/\(#[0-9]+\)//g'
+    echo -e "\n"
+    echo "**Upstream Changelog**: [link](https://github.com/DataDog/otel-profiling-agent/compare/${upstream_diff})"
+  else
+    echo "No changes"
+  fi
   echo -e "\n"
-  echo "**Upstream Changelog**: [link](https://github.com/DataDog/otel-profiling-agent/compare/${upstream_diff})"
-  echo -e "\n"
+
   echo "### Datadog changes:"
-  git log --pretty=format:"* %h %s" "${datadog_diff}" | cat
-  echo -e "\n"
-  echo "**Datadog Changelog**: [link](https://github.com/DataDog/otel-profiling-agent/compare/${datadog_diff})"
+  if [ -n "${datadog_diff}" ]; then
+    git log --pretty=format:"* %h %s" "${datadog_diff}" | cat
+    echo -e "\n"
+    echo "**Datadog Changelog**: [link](https://github.com/DataDog/otel-profiling-agent/compare/${datadog_diff})"
+  else
+    echo "No changes"
+  fi
   echo "</details>"
 }
 
