@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -29,7 +30,8 @@ const binaryCacheSize = 1000
 
 const sourceMapEndpoint = "/api/v2/srcmap"
 
-const uploadTimeout = 10 * time.Second
+const symbolCopyTimeout = 10 * time.Second
+const uploadTimeout = 15 * time.Second
 
 type DatadogUploader struct {
 	ddAPIKey  string
@@ -37,6 +39,7 @@ type DatadogUploader struct {
 	dryRun    bool
 
 	uploadCache *lru.SyncedLRU[libpf.FileID, struct{}]
+	client      *http.Client
 }
 
 var _ Uploader = (*DatadogUploader)(nil)
@@ -75,6 +78,9 @@ func NewDatadogUploader() (Uploader, error) {
 		dryRun:    dryRun,
 
 		uploadCache: uploadCache,
+		client: &http.Client{
+			Timeout: uploadTimeout,
+		},
 	}, nil
 }
 
@@ -117,15 +123,20 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 	// if there are many executables.
 	// Ideally, we should limit the number of concurrent uploads
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
-		defer cancel()
+		_, err = os.Stat(inputFilePath)
+		if err != nil {
+			d.uploadCache.Remove(fileID)
+			log.Debugf("Skipping symbol extraction for short-lived executable %s: %v", fileName,
+				err)
+			return
+		}
 
 		if d.dryRun {
 			log.Infof("Dry run: would upload symbols %s for executable: %s", inputFilePath, e)
 			return
 		}
 
-		err = d.handleSymbols(ctx, inputFilePath, e)
+		err = d.handleSymbols(inputFilePath, e)
 		if err != nil {
 			d.uploadCache.Remove(fileID)
 			log.Errorf("Failed to handle symbols: %v for executable: %s", err, e)
@@ -184,7 +195,7 @@ func (e *executableMetadata) String() string {
 	)
 }
 
-func (d *DatadogUploader) handleSymbols(ctx context.Context, symbolPath string,
+func (d *DatadogUploader) handleSymbols(symbolPath string,
 	e *executableMetadata) error {
 	symbolFile, err := os.CreateTemp("", "objcopy-debug")
 	if err != nil {
@@ -193,12 +204,14 @@ func (d *DatadogUploader) handleSymbols(ctx context.Context, symbolPath string,
 	defer os.Remove(symbolFile.Name())
 	defer symbolFile.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), symbolCopyTimeout)
+	defer cancel()
 	err = d.copySymbols(ctx, symbolPath, symbolFile.Name())
 	if err != nil {
 		return fmt.Errorf("failed to copy symbols: %w", err)
 	}
 
-	err = d.uploadSymbols(ctx, symbolFile, e)
+	err = d.uploadSymbols(symbolFile, e)
 	if err != nil {
 		return fmt.Errorf("failed to upload symbols: %w", err)
 	}
@@ -213,21 +226,21 @@ func (d *DatadogUploader) copySymbols(ctx context.Context, inputPath, outputPath
 		inputPath,
 		outputPath,
 	}
-	err := exec.CommandContext(ctx, "objcopy", args...).Run()
+	_, err := exec.CommandContext(ctx, "objcopy", args...).Output()
 	if err != nil {
-		return fmt.Errorf("failed to extract debug symbols: %w", err)
+		return fmt.Errorf("failed to extract debug symbols: %w", cleanCmdError(err))
 	}
 	return nil
 }
 
-func (d *DatadogUploader) uploadSymbols(ctx context.Context, symbolFile *os.File,
+func (d *DatadogUploader) uploadSymbols(symbolFile *os.File,
 	e *executableMetadata) error {
-	req, err := d.buildSymbolUploadRequest(ctx, symbolFile, e)
+	req, err := d.buildSymbolUploadRequest(symbolFile, e)
 	if err != nil {
 		return fmt.Errorf("failed to build symbol upload request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := d.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -243,7 +256,7 @@ func (d *DatadogUploader) uploadSymbols(ctx context.Context, symbolFile *os.File
 	return nil
 }
 
-func (d *DatadogUploader) buildSymbolUploadRequest(ctx context.Context, symbolFile *os.File,
+func (d *DatadogUploader) buildSymbolUploadRequest(symbolFile *os.File,
 	e *executableMetadata) (*http.Request, error) {
 	b := new(bytes.Buffer)
 
@@ -287,7 +300,7 @@ func (d *DatadogUploader) buildSymbolUploadRequest(ctx context.Context, symbolFi
 		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, d.intakeURL, b)
+	r, err := http.NewRequest(http.MethodPost, d.intakeURL, b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -350,4 +363,19 @@ func debugSymbolsPathForElf(ef *pfelf.File, fileName string) (string, error) {
 		return "", fmt.Errorf("executable %s does not have DWARF data", fileName)
 	}
 	return filePath, nil
+}
+
+// cleanCmdError simplifies error messages from os/exec.Cmd.Run.
+// For ExitErrors, it trims and returns stderr. By default, ExitError prints the exit
+// status but not stderr.
+//
+// cleanCmdError returns other errors unmodified.
+func cleanCmdError(err error) error {
+	var xerr *exec.ExitError
+	if errors.As(err, &xerr) {
+		if stderr := strings.TrimSpace(string(xerr.Stderr)); stderr != "" {
+			return fmt.Errorf("%w: %s", err, stderr)
+		}
+	}
+	return err
 }
