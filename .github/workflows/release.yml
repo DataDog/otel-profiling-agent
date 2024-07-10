@@ -30,7 +30,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "otel-profiling-agent-v*.tar.gz,sha256sum.txt"
+          artifacts: "otel-profiling-agent-v*.tar.gz,sha256sums.txt"
           allowUpdates: true
           omitBody:  true
           draft: true
