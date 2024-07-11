@@ -35,6 +35,8 @@ jobs:
         sudo make install
         cd zycore
         sudo make install
+    - name: Check out
+      uses: actions/checkout@v4
     - name: Set up Go ${{matrix.go}}
       uses: actions/setup-go@v5
       with:
@@ -57,8 +59,6 @@ jobs:
         sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
         sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
         rm "$PB_FILE"
-    - name: Check out
-      uses: actions/checkout@v4
     - name: Linter
       run: |
         go version
@@ -93,6 +93,8 @@ jobs:
         sudo make install
         cd zycore
         sudo make install
+    - name: Check out
+      uses: actions/checkout@v4
     - name: Set up Go ${{matrix.go}}
       uses: actions/setup-go@v5
       with:
@@ -117,8 +119,6 @@ jobs:
         sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
         sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
         rm "$PB_FILE"
-    - name: Check out
-      uses: actions/checkout@v4
     - name: Build
       run: |
         echo $PATH
@@ -224,6 +224,8 @@ jobs:
           sudo make install
           cd zycore
           sudo make install
+      - name: Check out
+        uses: actions/checkout@v4
       - name: Set up Go ${{matrix.go}}
         uses: actions/setup-go@v5
         with:
@@ -248,8 +250,6 @@ jobs:
           sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
           sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
           rm "$PB_FILE"
-      - name: Check out
-        uses: actions/checkout@v4
       - name: Build
         run: |
           echo $PATH
