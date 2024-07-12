@@ -69,29 +69,21 @@ type DatadogReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[libpf.TraceHash]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
 
 	// execPathes stores the last known execPath for a PID.
 	execPathes *lru.SyncedLRU[util.PID, string]
 }
 
 // ReportTraceEvent enqueues reported trace events for the Datadog reporter.
-func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-	comm, podName, containerID, containerName, apmServiceName string,
-	pid util.PID, tid util.TID) {
+func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace,
+	timestamp libpf.UnixTime64, comm, podName, containerID,
+	containerName, apmServiceName string, pid util.PID, tid util.TID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
-	if tr, exists := (*traceEvents)[trace.Hash]; exists {
-		tr.timestamps = append(tr.timestamps, uint64(timestamp))
-		(*traceEvents)[trace.Hash] = tr
-		return
-	}
-
-	(*traceEvents)[trace.Hash] = traceFramesCounts{
-		files:          trace.Files,
-		linenos:        trace.Linenos,
-		frameTypes:     trace.FrameTypes,
+	key := traceAndMetaKey{
+		hash:           trace.Hash,
 		comm:           comm,
 		podName:        podName,
 		containerID:    containerID,
@@ -99,7 +91,19 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.U
 		apmServiceName: apmServiceName,
 		pid:            pid,
 		tid:            tid,
-		timestamps:     []uint64{uint64(timestamp)},
+	}
+
+	if tr, exists := (*traceEvents)[key]; exists {
+		tr.timestamps = append(tr.timestamps, uint64(timestamp))
+		(*traceEvents)[key] = tr
+		return
+	}
+
+	(*traceEvents)[key] = traceFramesCounts{
+		files:      trace.Files,
+		linenos:    trace.Linenos,
+		frameTypes: trace.FrameTypes,
+		timestamps: []uint64{uint64(timestamp)},
 	}
 }
 
@@ -254,7 +258,7 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:     executables,
 		frames:          frames,
 		hostmetadata:    hostmetadata,
-		traceEvents:     xsync.NewRWMutex(map[libpf.TraceHash]traceFramesCounts{}),
+		traceEvents:     xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
 		execPathes:      execPathes,
 	}
 
@@ -382,7 +386,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	frameIDtoFunction := make(map[libpf.FrameID]*pprofile.Function)
 	totalSampleCount := 0
 
-	for _, traceInfo := range samples {
+	for traceKey, traceInfo := range samples {
 		sample := &pprofile.Sample{}
 
 		for _, ts := range traceInfo.timestamps {
@@ -494,7 +498,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 			sample.Location = append(sample.Location, loc)
 		}
 
-		execPath, _ := r.execPathes.Get(traceInfo.pid)
+		execPath, _ := r.execPathes.Get(traceKey.pid)
 
 		// Check if the last frame is a kernel frame.
 		if len(traceInfo.frameTypes) > 0 &&
@@ -513,7 +517,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		}
 
 		sample.Label = make(map[string][]string)
-		addTraceLabels(sample.Label, traceInfo)
+		addTraceLabels(sample.Label, traceKey)
 
 		count := int64(len(traceInfo.timestamps))
 		sample.Value = append(sample.Value, count, count*int64(r.samplingPeriod))
@@ -555,36 +559,36 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 	return function
 }
 
-func addTraceLabels(labels map[string][]string, i traceFramesCounts) {
-	if i.comm != "" {
-		labels["thread_name"] = append(labels["thread_name"], i.comm)
+func addTraceLabels(labels map[string][]string, k traceAndMetaKey) {
+	if k.comm != "" {
+		labels["thread_name"] = append(labels["thread_name"], k.comm)
 	}
 
-	if i.podName != "" {
-		labels["pod_name"] = append(labels["pod_name"], i.podName)
+	if k.podName != "" {
+		labels["pod_name"] = append(labels["pod_name"], k.podName)
 	}
 
-	if i.containerID != "" {
-		labels["container_id"] = append(labels["container_id"], i.containerID)
+	if k.containerID != "" {
+		labels["container_id"] = append(labels["container_id"], k.containerID)
 	}
 
-	if i.containerName != "" {
-		labels["container_name"] = append(labels["container_name"], i.containerName)
+	if k.containerName != "" {
+		labels["container_name"] = append(labels["container_name"], k.containerName)
 	}
 
-	if i.apmServiceName != "" {
-		labels["apmServiceName"] = append(labels["apmServiceName"], i.apmServiceName)
+	if k.apmServiceName != "" {
+		labels["apmServiceName"] = append(labels["apmServiceName"], k.apmServiceName)
 	}
 
-	if i.pid != 0 {
-		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", i.pid))
+	if k.pid != 0 {
+		labels["process_id"] = append(labels["process_id"], fmt.Sprintf("%d", k.pid))
 	}
 
-	if i.tid != 0 {
+	if k.tid != 0 {
 		// The naming has an impact on the backend side,
 		// this is why we use "thread id" instead of "thread_id"
 		// This is also consistent with ddprof.
-		labels["thread id"] = append(labels["thread id"], fmt.Sprintf("%d", i.tid))
+		labels["thread id"] = append(labels["thread id"], fmt.Sprintf("%d", k.tid))
 	}
 }
 

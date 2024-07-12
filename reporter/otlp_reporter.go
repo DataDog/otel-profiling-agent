@@ -56,11 +56,11 @@ type funcInfo struct {
 	fileName string
 }
 
-// traceFramesCounts holds known information about a trace.
-type traceFramesCounts struct {
-	files          []libpf.FileID
-	linenos        []libpf.AddressOrLineno
-	frameTypes     []libpf.FrameType
+// traceAndMetaKey is the deduplication key for samples. This **must always**
+// contain all trace fields that aren't already part of the trace hash to ensure
+// that we don't accidentally merge traces with different fields.
+type traceAndMetaKey struct {
+	hash           libpf.TraceHash
 	comm           string
 	podName        string
 	containerID    string
@@ -68,7 +68,14 @@ type traceFramesCounts struct {
 	apmServiceName string
 	pid            util.PID
 	tid            util.TID
-	timestamps     []uint64 // in nanoseconds
+}
+
+// traceFramesCounts holds known information about a trace.
+type traceFramesCounts struct {
+	files      []libpf.FileID
+	linenos    []libpf.AddressOrLineno
+	frameTypes []libpf.FrameType
+	timestamps []uint64 // in nanoseconds
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -105,7 +112,7 @@ type OTLPReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[libpf.TraceHash]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -130,16 +137,8 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
-	if tr, exists := (*traceEvents)[trace.Hash]; exists {
-		tr.timestamps = append(tr.timestamps, uint64(timestamp))
-		(*traceEvents)[trace.Hash] = tr
-		return
-	}
-
-	(*traceEvents)[trace.Hash] = traceFramesCounts{
-		files:          trace.Files,
-		linenos:        trace.Linenos,
-		frameTypes:     trace.FrameTypes,
+	key := traceAndMetaKey{
+		hash:           trace.Hash,
 		comm:           comm,
 		podName:        podName,
 		containerID:    containerID,
@@ -147,7 +146,19 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		apmServiceName: apmServiceName,
 		pid:            pid,
 		tid:            tid,
-		timestamps:     []uint64{uint64(timestamp)},
+	}
+
+	if tr, exists := (*traceEvents)[key]; exists {
+		tr.timestamps = append(tr.timestamps, uint64(timestamp))
+		(*traceEvents)[key] = tr
+		return
+	}
+
+	(*traceEvents)[key] = traceFramesCounts{
+		files:      trace.Files,
+		linenos:    trace.Linenos,
+		frameTypes: trace.FrameTypes,
+		timestamps: []uint64{uint64(timestamp)},
 	}
 }
 
@@ -292,7 +303,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[libpf.TraceHash]traceFramesCounts{}),
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
 	}
 
 	// Create a child context for reporting features
@@ -485,12 +496,12 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 	fileIDtoMapping := make(map[libpf.FileID]uint64)
 	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
-	for traceHash, traceInfo := range samples {
+	for traceKey, traceInfo := range samples {
 		sample := &profiles.Sample{}
 		sample.LocationsStartIndex = locationIndex
 
 		sample.StacktraceIdIndex = getStringMapIndex(stringMap,
-			traceHash.Base64())
+			traceKey.hash.Base64())
 
 		timestamps, values := dedupSlice(traceInfo.timestamps)
 		// dedupTimestamps returns a sorted list of timestamps, so
@@ -619,7 +630,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = getSampleAttributes(profile, traceInfo)
+		sample.Attributes = getSampleAttributes(profile, traceKey)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -690,7 +701,7 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 }
 
 // getSampleAttributes builds a sample-specific list of attributes.
-func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint64 {
+func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey) []uint64 {
 	indices := make([]uint64, 0, 4)
 
 	addAttr := func(k attribute.Key, v string) {
@@ -705,13 +716,13 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 		})
 	}
 
-	addAttr(semconv.K8SPodNameKey, i.podName)
-	addAttr(semconv.ContainerIDKey, i.containerID)
-	addAttr(semconv.ContainerNameKey, i.containerName)
-	addAttr(semconv.ThreadNameKey, i.comm)
-	addAttr(semconv.ServiceNameKey, i.apmServiceName)
-	addAttr("process_id", strconv.Itoa(int(i.pid)))
-	addAttr(semconv.ThreadIDKey, strconv.Itoa(int(i.tid)))
+	addAttr(semconv.K8SPodNameKey, k.podName)
+	addAttr(semconv.ContainerIDKey, k.containerID)
+	addAttr(semconv.ContainerNameKey, k.containerName)
+	addAttr(semconv.ThreadNameKey, k.comm)
+	addAttr(semconv.ServiceNameKey, k.apmServiceName)
+	addAttr("process_id", strconv.Itoa(int(k.pid)))
+	addAttr(semconv.ThreadIDKey, strconv.Itoa(int(k.tid)))
 
 	return indices
 }
