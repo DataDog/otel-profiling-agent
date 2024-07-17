@@ -2133,11 +2133,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vms.FramePointer.BytecodeOffset)
 	}
 
-	if d.snapshotRange.Start != 0 {
-		if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindV8, info.FileID(),
-			[]util.Range{d.snapshotRange}); err != nil {
-			return nil, err
-		}
+	if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindV8, info.FileID(),
+		[]util.Range{d.snapshotRange}); err != nil {
+		return nil, err
 	}
 
 	return d, nil
