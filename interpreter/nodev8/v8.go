@@ -584,19 +584,23 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 	}
 
-	// Remove prefixes not seen
-	for prefix, generation := range i.prefixes {
-		if generation == i.mappingGeneration {
-			continue
-		}
-		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
-		delete(i.prefixes, prefix)
-	}
 	for m, generation := range i.mappings {
 		if generation == i.mappingGeneration {
 			continue
 		}
 		log.Debugf("Disabling V8 for %#x/%#x", m.Vaddr, m.Length)
+		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
+		if err != nil {
+			return fmt.Errorf("new anonymous mapping lpm failure %#x/%#x", m.Vaddr, m.Length)
+		}
+		for _, prefix := range prefixes {
+			if prefixGeneration, ok := i.prefixes[prefix]; ok &&
+				prefixGeneration == i.mappingGeneration {
+				continue
+			}
+			_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+			delete(i.prefixes, prefix)
+		}
 		delete(i.mappings, m)
 	}
 
