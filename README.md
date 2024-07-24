@@ -4,6 +4,12 @@ This is an experimental fork of [elastic/otel-profiling-agent](https://github.co
 
 Our fork adds support for sending profiling data to the Datadog backend via the Datadog Agent. We are active members of the OpenTelemetry Profiling SIG that is working on the OpenTelemetry profiling signal. However, the signal is still under active development, so this fork can be used by Datadog users until we release our support for directly ingesting the data using OTLP.
 
+## Requirements
+
+The otel-profiling-agent requires the following Linux kernel versions:
+* Kernel version 4.19 or newer for amd64/x86_64
+* Kernel version 5.5 or newer for arm64/aarch64
+
 ## Installation
 
 Download pre-built amd64 and arm64 binaries for our [latest release](https://github.com/DataDog/otel-profiling-agent/releases/latest).
