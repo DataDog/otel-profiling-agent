@@ -1,0 +1,23 @@
+FROM ubuntu:latest
+
+USER root
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends binutils curl sudo ca-certificates
+ENV AGENT_VERSION=v0.1.1-dd
+
+ENV CHECKSUM_x86_64=703057f017f09b5930ca2cffea880e86a78faef25e2985c7e568330976e9704f
+ENV CHECKSUM_aarch64=2235aced7a6b93ff2c38544d41095a30fb894057d3ca9839f4590821b889119d
+
+RUN file_name=otel-profiling-agent-${AGENT_VERSION}-$(uname -m).tar.gz \
+    && curl -OL "https://github.com/DataDog/otel-profiling-agent/releases/download/${AGENT_VERSION}/${file_name}" \
+    && CHECKSUM="CHECKSUM_$(uname -m)" \
+    && echo "$(eval echo \$${CHECKSUM})  ${file_name}" | sha256sum -c - \
+    && tar xzf ${file_name} -C /tmp \
+    && mv /tmp/otel-profiling-agent /usr/local/bin/otel-profiling-agent \
+    && chmod +x /usr/local/bin/otel-profiling-agent
+
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+CMD ["/bin/sh", "-c", "sudo -E /usr/local/bin/otel-profiling-agent"]
