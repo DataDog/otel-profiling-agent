@@ -112,7 +112,7 @@ type OTLPReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]*traceFramesCounts]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -154,7 +154,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		return
 	}
 
-	(*traceEvents)[key] = traceFramesCounts{
+	(*traceEvents)[key] = &traceFramesCounts{
 		files:      trace.Files,
 		linenos:    trace.Linenos,
 		frameTypes: trace.FrameTypes,
@@ -303,7 +303,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceFramesCounts{}),
 	}
 
 	// Create a child context for reporting features
@@ -445,7 +445,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 }
 
 // getProfile returns an OTLP profile containing all collected samples up to this moment.
-func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, endTS uint64) {
+func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS uint64) {
 	traceEvents := r.traceEvents.WLock()
 	samples := maps.Clone(*traceEvents)
 	for key := range *traceEvents {

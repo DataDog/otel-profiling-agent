@@ -69,7 +69,7 @@ type DatadogReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]*traceFramesCounts]
 
 	// execPathes stores the last known execPath for a PID.
 	execPathes *lru.SyncedLRU[util.PID, string]
@@ -99,7 +99,7 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace,
 		return
 	}
 
-	(*traceEvents)[key] = traceFramesCounts{
+	(*traceEvents)[key] = &traceFramesCounts{
 		files:      trace.Files,
 		linenos:    trace.Linenos,
 		frameTypes: trace.FrameTypes,
@@ -258,7 +258,7 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:     executables,
 		frames:          frames,
 		hostmetadata:    hostmetadata,
-		traceEvents:     xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
+		traceEvents:     xsync.NewRWMutex(map[traceAndMetaKey]*traceFramesCounts{}),
 		execPathes:      execPathes,
 	}
 
