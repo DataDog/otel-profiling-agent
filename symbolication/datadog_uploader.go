@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -147,14 +148,17 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 }
 
 type executableMetadata struct {
-	Arch       string `json:"arch"`
-	GNUBuildID string `json:"gnu_build_id"`
-	GoBuildID  string `json:"go_build_id"`
-	FileHash   string `json:"file_hash"`
-	Platform   string `json:"platform"`
-	Type       string `json:"type"`
+	Arch          string `json:"arch"`
+	GNUBuildID    string `json:"gnu_build_id"`
+	GoBuildID     string `json:"go_build_id"`
+	FileHash      string `json:"file_hash"`
+	Type          string `json:"type"`
+	SymbolSource  string `json:"symbol_source"`
+	Origin        string `json:"origin"`
+	OriginVersion string `json:"origin_version"`
+	FileName      string `json:"filename"`
 
-	fileName string
+	filePath string
 }
 
 func newExecutableMetadata(fileName string, elf *pfelf.File,
@@ -177,21 +181,25 @@ func newExecutableMetadata(fileName string, elf *pfelf.File,
 	}
 
 	return &executableMetadata{
-		Arch:       runtime.GOARCH,
-		GNUBuildID: buildID,
-		GoBuildID:  goBuildID,
-		FileHash:   fileID.StringNoQuotes(),
-		Platform:   "elf",
-		Type:       "elf_symbol_file",
-
-		fileName: fileName,
+		Arch:          runtime.GOARCH,
+		GNUBuildID:    buildID,
+		GoBuildID:     goBuildID,
+		FileHash:      fileID.StringNoQuotes(),
+		Type:          "elf_symbol_file",
+		Origin:        "otel-profiling-agent",
+		OriginVersion: strings.TrimLeft(vc.Version(), "v"),
+		SymbolSource:  "debug_info",
+		FileName:      filepath.Base(fileName),
+		filePath:      fileName,
 	}, nil
 }
 
 func (e *executableMetadata) String() string {
 	return fmt.Sprintf(
-		"%s, arch=%s, gnu_build_id=%s, go_build_id=%s, file_hash=%s, platform=%s, type=%s",
-		e.fileName, e.Arch, e.GNUBuildID, e.GoBuildID, e.FileHash, e.Platform, e.Type,
+		"%s, filename=%s, arch=%s, gnu_build_id=%s, go_build_id=%s, file_hash=%s, type=%s"+
+			", symbol_source=%s, origin=%s, origin_version=%s",
+		e.filePath, e.FileName, e.Arch, e.GNUBuildID, e.GoBuildID, e.FileHash, e.Type,
+		e.SymbolSource, e.Origin, e.OriginVersion,
 	)
 }
 
