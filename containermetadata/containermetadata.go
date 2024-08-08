@@ -88,9 +88,15 @@ var (
 	dockerBuildkitPattern = regexp.MustCompile(`\d+:.*:/.*/*docker/buildkit/([0-9a-z]+)`)
 	lxcPattern            = regexp.MustCompile(`\d+::/lxc\.(monitor|payload)\.([a-zA-Z]+)/`)
 	containerdPattern     = regexp.MustCompile(`\d+:.+:/([a-zA-Z0-9_-]+)/+([a-zA-Z0-9_-]+)`)
-	defaultPattern        = regexp.MustCompile(`^.*/(?:.*[-:])?([0-9a-f]+)(?:\.|\s*$)`)
+	defaultPattern        = regexp.MustCompile(`^.*/(?:.*[-:])?(` +
+		containerIDPatternStr + `)(?:\.|\s*$)`)
 
-	containerIDPattern = regexp.MustCompile(`.+://([0-9a-f]{64})`)
+	containerIDPatternStr = `[0-9a-f]{64}|[0-9a-f]{32}-\\d+|[0-9a-f]{8}(-[0-9a-f]{4}){4}$`
+	// ContainerRegexpStr defines the regexp used to match container IDs
+	// ([0-9a-f]{64}) is standard container id used pretty much everywhere
+	// ([0-9a-f]{32}-\d+) is container id used by AWS ECS
+	// ([0-9a-f]{8}(-[0-9a-f]{4}){4}$) is container id used by Garden
+	containerIDPattern = regexp.MustCompile(containerIDPatternStr)
 
 	cgroup = "/proc/%d/cgroup"
 
@@ -445,7 +451,7 @@ func matchContainerID(containerIDStr string) (string, error) {
 		return "", fmt.Errorf("could not get string submatch for container id %v",
 			containerIDStr)
 	}
-	return containerIDParts[1], nil
+	return containerIDParts[0], nil
 }
 
 func getNodeName() (string, error) {
