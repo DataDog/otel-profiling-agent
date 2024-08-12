@@ -1,0 +1,16 @@
+# syntax=docker.io/docker/dockerfile:1.7-labs
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends binutils ca-certificates
+
+COPY --parents agent-** /tmp/
+
+RUN mv /tmp/agent-$(uname -p)/otel-profiling-agent /usr/local/bin/otel-profiling-agent \
+    && chmod +x /usr/local/bin/otel-profiling-agent \
+    && rm -rf /tmp/agent*
+
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+CMD ["/usr/local/bin/otel-profiling-agent"]
