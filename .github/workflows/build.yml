@@ -62,7 +62,7 @@ jobs:
     - name: Linter
       run: |
         go version
-        make lint
+        make lint TARGET_ARCH=amd64
 
   test:
     name: Test

@@ -34,7 +34,7 @@ binary:
 ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
 
-GOLANGCI_LINT_VERSION = "v1.59.1"
+GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate
 	# We don't want to build the tracers here, so we stub them for linting
 	touch support/ebpf/tracer.ebpf.x86
