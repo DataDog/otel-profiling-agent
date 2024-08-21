@@ -12,8 +12,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
 	ah "github.com/elastic/otel-profiling-agent/armhelpers"
+	"github.com/elastic/otel-profiling-agent/libpf"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
