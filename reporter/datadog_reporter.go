@@ -50,6 +50,8 @@ type DatadogReporter struct {
 
 	agentAddr string
 
+	timeline bool
+
 	samplingPeriod uint64
 
 	saveCPUProfile bool
@@ -256,6 +258,7 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		agentAddr:       cfg.CollAgentAddr,
 		samplingPeriod:  1000000000 / uint64(cfg.SamplesPerSecond),
 		saveCPUProfile:  cfg.SaveCPUProfile,
+		timeline:        cfg.Timeline,
 		fallbackSymbols: fallbackSymbols,
 		executables:     executables,
 		frames:          frames,
@@ -398,9 +401,9 @@ func copySample(sample *pprofile.Sample) *pprofile.Sample {
 }
 
 func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofile.Profile, traceKey traceAndMetaKey,
-	traceInfo *traceFramesCounts, ts uint64, fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
+	traceInfo *traceFramesCounts, fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
 	frameIDtoFunction map[libpf.FrameID]*pprofile.Function,
-	funcMap map[funcInfo]*pprofile.Function, aggregateAllTimestamps bool) {
+	funcMap map[funcInfo]*pprofile.Function) {
 	const unknownStr = "UNKNOWN"
 	// Walk every frame of the trace.
 	for i := range traceInfo.frameTypes {
@@ -502,7 +505,10 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 	}
 
 	execPath, _ := r.execPathes.Get(traceKey.pid)
-
+	baseExec := path.Base(execPath)
+	if baseExec == "." || baseExec == "/" {
+		baseExec = execPath // avoids kernel being transformed in .
+	}
 	// Check if the last frame is a kernel frame.
 	if len(traceInfo.frameTypes) > 0 &&
 		traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
@@ -512,16 +518,15 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 	}
 
 	if execPath != "" {
-		base := path.Base(execPath)
 		loc := createPProfLocation(profile, 0)
-		m := createPprofFunctionEntry(funcMap, profile, base, execPath)
+		m := createPprofFunctionEntry(funcMap, profile, baseExec, execPath)
 		loc.Line = append(loc.Line, pprofile.Line{Function: m})
 		sample.Location = append(sample.Location, loc)
 	}
 
 	sample.Label = make(map[string][]string)
-	addTraceLabels(sample.Label, traceKey)
-	if aggregateAllTimestamps {
+	addTraceLabels(sample.Label, traceKey, baseExec)
+	if !r.timeline {
 		// Aggregate all timestamps into one sample
 		count := len(traceInfo.timestamps)
 		sample.Value = append(sample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
@@ -533,7 +538,8 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 			individualSample.Label["end_timestamp_ns"] = []string{strconv.FormatUint(ts, 10)}
 			count := 1
 			// we can append the value as we should not have set this part yet
-			individualSample.Value = append(individualSample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
+			individualSample.Value = append(individualSample.Value, int64(count),
+				int64(count)*int64(r.samplingPeriod))
 			profile.Sample = append(profile.Sample, individualSample)
 		}
 	}
@@ -548,10 +554,9 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		delete(*traceEvents, key)
 	}
 	r.traceEvents.WUnlock(&traceEvents)
-	aggregateAllTimestamps := false // todo timeline flag here
 	numSamples := len(samples)
-	if !aggregateAllTimestamps {
-		numSamples = numSamples * 4
+	if r.timeline {
+		numSamples *= 4
 	}
 
 	// funcMap is a temporary helper that will build the Function array
@@ -584,8 +589,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		}
 		sample := &pprofile.Sample{}
 		count := len(traceInfo.timestamps)
-		r.processSample(sample, profile, traceKey, traceInfo, 0, fileIDtoMapping,
-			frameIDtoFunction, funcMap, aggregateAllTimestamps)
+		r.processSample(sample, profile, traceKey, traceInfo, fileIDtoMapping,
+			frameIDtoFunction, funcMap)
 		totalSampleCount += count
 	}
 	log.Infof("Reporting pprof profile with %d samples from %v to %v",
@@ -624,7 +629,7 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 }
 
 //nolint:gocritic
-func addTraceLabels(labels map[string][]string, k traceAndMetaKey) {
+func addTraceLabels(labels map[string][]string, k traceAndMetaKey, baseExec string) {
 	if k.comm != "" {
 		labels["thread_name"] = append(labels["thread_name"], k.comm)
 	}
@@ -656,8 +661,8 @@ func addTraceLabels(labels map[string][]string, k traceAndMetaKey) {
 		labels["thread id"] = append(labels["thread id"], fmt.Sprintf("%d", k.tid))
 	}
 
-	if k.comm != "" {
-		labels["comm"] = append(labels["comm"], k.comm)
+	if baseExec != "" {
+		labels["process_name"] = append(labels["process_name"], baseExec)
 	}
 }
 
