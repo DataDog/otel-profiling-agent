@@ -403,6 +403,12 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
+	if err := trc.AttachAllocationHook(); err != nil {
+		msg := fmt.Sprintf("Failed to attach allocation hook: %v", err)
+		log.Error(msg)
+		return exitFailure
+	}
+
 	// This log line is used in our system tests to verify if that the agent has started. So if you
 	// change this log line update also the system test.
 	log.Printf("Attached sched monitor")

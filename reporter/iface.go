@@ -42,7 +42,7 @@ type TraceReporter interface {
 	// enqueued for reporting, and false if the event was ignored.
 	ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
 		comm, podName, containerID, containerName, apmServiceName string,
-		pid util.PID, tid util.TID)
+		pid util.PID, tid util.TID, allocSize uint64, allocAddress libpf.Address)
 
 	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
 	// via ReportTraceEvent().

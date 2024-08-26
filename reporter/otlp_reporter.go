@@ -69,6 +69,8 @@ type traceFramesCounts struct {
 	pid            util.PID
 	tid            util.TID
 	timestamps     []uint64 // in nanoseconds
+	allocCount     uint64
+	allocSize      uint64
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -126,7 +128,8 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	timestamp libpf.UnixTime64, comm, podName, containerID,
-	containerName, apmServiceName string, pid util.PID, tid util.TID) {
+	containerName, apmServiceName string, pid util.PID, tid util.TID,
+	allocSize uint64, allocAddress libpf.Address) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 

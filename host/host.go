@@ -58,4 +58,6 @@ type Trace struct {
 	TID              util.TID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
+	AllocSize        uint64
+	AllocAddress     libpf.Address
 }

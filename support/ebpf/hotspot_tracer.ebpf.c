@@ -861,3 +861,41 @@ int unwind_hotspot(struct pt_regs *ctx) {
   DEBUG_PRINT("jvm: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_hotspot")
+int unwind_hotspot_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  Trace *trace = &record->trace;
+  pid_t pid = trace->pid;
+  DEBUG_PRINT("==== jvm: unwind %d ====", trace->stack_len);
+
+  HotspotProcInfo *ji = bpf_map_lookup_elem(&hotspot_procs, &pid);
+  if (!ji) {
+    DEBUG_PRINT("jvm: no HotspotProcInfo for this pid");
+    return 0;
+  }
+
+  int unwinder = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+#pragma unroll
+  for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
+    unwinder = PROG_UNWIND_STOP;
+    error = hotspot_unwind_one_frame(record, ji);
+    if (error) {
+      break;
+    }
+
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != PROG_UNWIND_HOTSPOT) {
+      break;
+    }
+  }
+
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  DEBUG_PRINT("jvm: tail call for next frame unwinder (%d) failed", unwinder);
+  return -1;
+}

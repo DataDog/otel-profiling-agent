@@ -78,12 +78,19 @@ type DatadogReporter struct {
 // ReportTraceEvent enqueues reported trace events for the Datadog reporter.
 func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
 	comm, podName, containerID, containerName, apmServiceName string,
-	pid util.PID, tid util.TID) {
+	pid util.PID, tid util.TID, allocSize uint64, allocAddress libpf.Address) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
+	allocCount := uint64(0)
+	if allocSize != 0 {
+		allocCount = 1
+	}
+
 	if tr, exists := (*traceEvents)[trace.Hash]; exists {
 		tr.timestamps = append(tr.timestamps, uint64(timestamp))
+		tr.allocCount += allocCount
+		tr.allocSize += allocSize
 		(*traceEvents)[trace.Hash] = tr
 		return
 	}
@@ -100,6 +107,8 @@ func (r *DatadogReporter) ReportTraceEvent(trace *libpf.Trace, timestamp libpf.U
 		pid:            pid,
 		tid:            tid,
 		timestamps:     []uint64{uint64(timestamp)},
+		allocSize:      allocSize,
+		allocCount:     allocCount,
 	}
 }
 
@@ -369,8 +378,11 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	funcMap := make(map[funcInfo]*pprofile.Function)
 
 	profile = &pprofile.Profile{
-		SampleType: []*pprofile.ValueType{{Type: "cpu-samples", Unit: "count"},
-			{Type: "cpu-time", Unit: "nanoseconds"}},
+		SampleType: []*pprofile.ValueType{
+			{Type: "cpu-samples", Unit: "count"},
+			{Type: "cpu-time", Unit: "nanoseconds"},
+			{Type: "alloc-samples", Unit: "count"},
+			{Type: "alloc-space", Unit: "bytes"}},
 		Sample:            make([]*pprofile.Sample, 0, numSamples),
 		PeriodType:        &pprofile.ValueType{Type: "cpu-time", Unit: "nanoseconds"},
 		Period:            int64(r.samplingPeriod),
@@ -515,7 +527,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		addTraceLabels(sample.Label, traceInfo)
 
 		count := int64(len(traceInfo.timestamps))
-		sample.Value = append(sample.Value, count, count*int64(r.samplingPeriod))
+		sample.Value = append(sample.Value, count, count*int64(r.samplingPeriod),
+			int64(traceInfo.allocCount), int64(traceInfo.allocSize))
 		profile.Sample = append(profile.Sample, sample)
 		totalSampleCount += len(traceInfo.timestamps)
 	}

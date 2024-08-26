@@ -328,3 +328,49 @@ exit:
   DEBUG_PRINT("v8: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+
+SEC("uprobe/unwind_v8")
+int unwind_v8_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace = &record->trace;
+  u32 pid = trace->pid;
+  DEBUG_PRINT("==== unwind_v8 %d ====", trace->stack_len);
+
+  int unwinder = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+  V8ProcInfo *vi = bpf_map_lookup_elem(&v8_procs, &pid);
+  if (!vi) {
+    DEBUG_PRINT("v8: no V8ProcInfo for this pid");
+    error = ERR_V8_NO_PROC_INFO;
+    increment_metric(metricID_UnwindV8ErrNoProcInfo);
+    goto exit;
+  }
+
+  increment_metric(metricID_UnwindV8Attempts);
+
+#pragma unroll
+  for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
+    unwinder = PROG_UNWIND_STOP;
+
+    error = unwind_one_v8_frame(record, vi, i == 0);
+    if (error) {
+      break;
+    }
+
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != PROG_UNWIND_V8) {
+      break;
+    }
+  }
+
+exit:
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  DEBUG_PRINT("v8: tail call for next frame unwinder (%d) failed", unwinder);
+  return -1;
+}

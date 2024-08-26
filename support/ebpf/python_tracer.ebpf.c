@@ -318,3 +318,46 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_python")
+int unwind_python_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  ErrorCode error = ERR_OK;
+  int unwinder = get_next_unwinder_after_interpreter(record);
+  Trace *trace = &record->trace;
+  u32 pid = trace->pid;
+
+  DEBUG_PRINT("unwind_python()");
+
+  const PyProcInfo *pyinfo = bpf_map_lookup_elem(&py_procs, &pid);
+  if (!pyinfo) {
+    // Not a Python process that we have info on
+    DEBUG_PRINT("Can't build Python stack, no address info");
+    increment_metric(metricID_UnwindPythonErrNoProcInfo);
+    return ERR_PYTHON_NO_PROC_INFO;
+  }
+
+  DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
+  if (!record->pythonUnwindState.py_frame) {
+    increment_metric(metricID_UnwindPythonAttempts);
+    error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
+    if (error) {
+      goto exit;
+    }
+  }
+  if (!record->pythonUnwindState.py_frame) {
+    DEBUG_PRINT("  -> Python frames are handled");
+    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
+    goto exit;
+  }
+
+  error = walk_python_stack(record, pyinfo, &unwinder);
+
+exit:
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  return -1;
+}

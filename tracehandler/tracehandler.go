@@ -159,7 +159,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	if m.reporter.SupportsReportTraceEvent() {
 		m.reporter.ReportTraceEvent(umTrace, timestamp,
 			bpfTrace.Comm, meta.PodName, meta.ContainerID, meta.ContainerName,
-			svcName, bpfTrace.PID, bpfTrace.TID)
+			svcName, bpfTrace.PID, bpfTrace.TID, bpfTrace.AllocSize, bpfTrace.AllocAddress)
 		return
 	}
 	m.reporter.ReportCountForTrace(umTrace.Hash, timestamp, 1,

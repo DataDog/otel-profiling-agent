@@ -33,6 +33,14 @@ bpf_map_def SEC("maps") progs = {
   .max_entries = NUM_TRACER_PROGS,
 };
 
+// progs maps from a program ID to an eBPF program
+bpf_map_def SEC("maps") progs_uprobe = {
+  .type = BPF_MAP_TYPE_PROG_ARRAY,
+  .key_size = sizeof(u32),
+  .value_size = sizeof(u32),
+  .max_entries = NUM_TRACER_PROGS,
+};
+
 // report_events notifies user space about events (GENERIC_PID and TRACES_FOR_SYMBOLIZATION).
 //
 // As a key the CPU number is used and the value represents a perf event file descriptor.
@@ -174,6 +182,72 @@ void maybe_add_apm_info(Trace *trace) {
 
 SEC("perf_event/unwind_stop")
 int unwind_stop(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+  Trace *trace = &record->trace;
+  UnwindState *state = &record->state;
+
+  maybe_add_apm_info(trace);
+
+  // If the stack is otherwise empty, push an error for that: we should
+  // never encounter empty stacks for successful unwinding.
+  if (trace->stack_len == 0 && trace->kernel_stack_id < 0) {
+    DEBUG_PRINT("unwind_stop called but the stack is empty");
+    increment_metric(metricID_ErrEmptyStack);
+    if (!state->unwind_error) {
+      state->unwind_error = ERR_EMPTY_STACK;
+    }
+  }
+
+  // If unwinding was aborted due to a critical error, push an error frame.
+  if (state->unwind_error) {
+    push_error(&record->trace, state->unwind_error);
+  }
+
+  switch (state->error_metric) {
+  case -1:
+    // No Error
+    break;
+  case metricID_UnwindNativeErrWrongTextSection:;
+    if (report_pid(ctx, trace->pid, record->ratelimitAction)) {
+      increment_metric(metricID_NumUnknownPC);
+    }
+    // Fallthrough to report the error
+  default:
+    increment_metric(state->error_metric);
+  }
+
+  // TEMPORARY HACK
+  //
+  // If we ended up with a trace that consists of only a single error frame, drop it.
+  // This is required as long as the process manager provides the option to filter out
+  // error frames, to prevent empty traces from being sent. While it might seem that this
+  // filtering should belong into the HA code that does the filtering, it is actually
+  // surprisingly hard to implement that way: since traces and their counts are reported
+  // through different data structures, we'd have to keep a list of known empty traces to
+  // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
+  // this is trivial.
+  if (trace->stack_len == 1 && trace->kernel_stack_id < 0 && state->unwind_error) {
+    u32 syscfg_key = 0;
+    SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &syscfg_key);
+    if (!syscfg) {
+      return -1; // unreachable
+    }
+
+    if (syscfg->drop_error_only_traces) {
+      return 0;
+    }
+  }
+  // TEMPORARY HACK END
+
+  send_trace(ctx, trace);
+
+  return 0;
+}
+
+SEC("uprobe/unwind_stop")
+int unwind_stop_uprobe(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
