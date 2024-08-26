@@ -364,42 +364,6 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	return err
 }
 
-func copySample(sample *pprofile.Sample) *pprofile.Sample {
-	// Create a new Sample struct
-	newSample := &pprofile.Sample{}
-
-	if sample.Location != nil {
-		newSample.Location = append([]*pprofile.Location{}, sample.Location...)
-	}
-
-	if sample.Value != nil {
-		newSample.Value = append([]int64{}, sample.Value...)
-	}
-
-	if sample.Label != nil {
-		newSample.Label = make(map[string][]string)
-		for k, v := range sample.Label {
-			newSample.Label[k] = append([]string{}, v...)
-		}
-	}
-
-	if sample.NumLabel != nil {
-		newSample.NumLabel = make(map[string][]int64)
-		for k, v := range sample.NumLabel {
-			newSample.NumLabel[k] = append([]int64{}, v...)
-		}
-	}
-
-	if sample.NumUnit != nil {
-		newSample.NumUnit = make(map[string][]string)
-		for k, v := range sample.NumUnit {
-			newSample.NumUnit[k] = append([]string{}, v...)
-		}
-	}
-
-	return newSample
-}
-
 func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofile.Profile, traceKey traceAndMetaKey,
 	traceInfo *traceFramesCounts, fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
 	frameIDtoFunction map[libpf.FrameID]*pprofile.Function,
@@ -526,23 +490,17 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 
 	sample.Label = make(map[string][]string)
 	addTraceLabels(sample.Label, traceKey, baseExec)
-	if !r.timeline {
-		// Aggregate all timestamps into one sample
-		count := len(traceInfo.timestamps)
-		sample.Value = append(sample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
-		profile.Sample = append(profile.Sample, sample)
-	} else {
-		// Process each timestamp separately
+	if r.timeline {
+		timestamps := make([]string, 0, len(traceInfo.timestamps))
 		for _, ts := range traceInfo.timestamps {
-			individualSample := copySample(sample)
-			individualSample.Label["end_timestamp_ns"] = []string{strconv.FormatUint(ts, 10)}
-			count := 1
-			// we can append the value as we should not have set this part yet
-			individualSample.Value = append(individualSample.Value, int64(count),
-				int64(count)*int64(r.samplingPeriod))
-			profile.Sample = append(profile.Sample, individualSample)
+			timestamps = append(timestamps, strconv.FormatUint(ts, 10))
 		}
+		// Assign all timestamps as a single label entry
+		sample.Label["end_timestamp_ns"] = timestamps
 	}
+	count := len(traceInfo.timestamps)
+	sample.Value = append(sample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
+	profile.Sample = append(profile.Sample, sample)
 }
 
 // getPprofProfile returns a pprof profile containing all collected samples up to this moment.
