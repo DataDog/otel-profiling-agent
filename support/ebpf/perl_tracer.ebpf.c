@@ -426,3 +426,74 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_perl")
+int unwind_perl_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace = &record->trace;
+  u32 pid = trace->pid;
+  DEBUG_PRINT("unwind_perl()");
+
+  PerlProcInfo *perlinfo = bpf_map_lookup_elem(&perl_procs, &pid);
+  if (!perlinfo) {
+    DEBUG_PRINT("Can't build Perl stack, no address info");
+    return 0;
+  }
+
+  int unwinder = get_next_unwinder_after_interpreter(record);
+  DEBUG_PRINT("Building Perl stack for 0x%x", perlinfo->version);
+
+  if (!record->perlUnwindState.stackinfo) {
+    // First Perl main loop encountered. Extract first the Interpreter state.
+    increment_metric(metricID_UnwindPerlAttempts);
+
+    void *interpreter;
+    if (perlinfo->stateInTSD) {
+      void *tsd_base;
+      if (tsd_get_base(&tsd_base)) {
+        DEBUG_PRINT("Failed to get TSD base address");
+        goto err_tsd;
+      }
+
+      int tsd_key;
+      if (bpf_probe_read_user(&tsd_key, sizeof(tsd_key), (void*)perlinfo->stateAddr)) {
+        DEBUG_PRINT("Failed to read tsdKey from 0x%lx", (unsigned long)perlinfo->stateAddr);
+        goto err_tsd;
+      }
+
+      if (tsd_read(&perlinfo->tsdInfo, tsd_base, tsd_key, &interpreter)) {
+      err_tsd:
+        increment_metric(metricID_UnwindPerlTSD);
+        goto exit;
+      }
+
+      DEBUG_PRINT("TSD Base 0x%lx, TSD Key %d", (unsigned long) tsd_base, tsd_key);
+    } else {
+      interpreter = (void*)perlinfo->stateAddr;
+    }
+    DEBUG_PRINT("PerlInterpreter 0x%lx", (unsigned long)interpreter);
+
+    if (bpf_probe_read_user(&record->perlUnwindState.stackinfo, sizeof(record->perlUnwindState.stackinfo),
+                            (void*)interpreter + perlinfo->interpreter_curstackinfo) ||
+        bpf_probe_read_user(&record->perlUnwindState.cop, sizeof(record->perlUnwindState.cop),
+                            (void*)interpreter + perlinfo->interpreter_curcop)) {
+      DEBUG_PRINT("Failed to read interpreter state");
+      increment_metric(metricID_UnwindPerlReadStackInfo);
+      goto exit;
+    }
+    DEBUG_PRINT("COP from interpreter state 0x%lx", (unsigned long)record->perlUnwindState.cop);
+
+    prepare_perl_stack(record, perlinfo);
+  }
+
+  // Unwind one call stack or unrolled length, and continue
+  unwinder = walk_perl_stack(record, perlinfo);
+
+exit:
+  tail_call_uprobe(ctx, unwinder);
+  return -1;
+}

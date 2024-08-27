@@ -221,6 +221,8 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_trace_id.as_int.hi = 0;
   trace->apm_trace_id.as_int.lo = 0;
   trace->apm_transaction_id.as_int = 0;
+  trace->alloc_addr = 0;
+  trace->alloc_size = 0;
 
   return record;
 }
@@ -443,6 +445,31 @@ void tail_call(void *ctx, int next) {
   record->tailCalls += 1 ;
 
   bpf_tail_call(ctx, &progs, next);
+}
+
+static inline __attribute__((__always_inline__))
+void tail_call_uprobe(void *ctx, int next) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    bpf_tail_call(ctx, &progs_uprobe, PROG_UNWIND_STOP);
+    // In theory bpf_tail_call() should never return. But due to instruction reordering by the
+    // compiler we have to place return here to bribe the verifier to accept this.
+    return;
+  }
+
+  if (record->tailCalls >= 29 ) {
+    // The maximum tail call count we need to support on older kernels is 32. At this point
+    // there is a chance that continuing unwinding the stack would further increase the number of
+    // tail calls. As a result we might lose the unwound stack as no further tail calls are left
+    // to report it to user space. To make sure we do not run into this issue we stop unwinding
+    // the stack at this point and report it to userspace.
+    next = PROG_UNWIND_STOP;
+    record->state.unwind_error = ERR_MAX_TAIL_CALLS;
+    increment_metric(metricID_MaxTailCalls);
+  }
+  record->tailCalls += 1 ;
+
+  bpf_tail_call(ctx, &progs_uprobe, next);
 }
 
 #endif

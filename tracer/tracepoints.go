@@ -42,3 +42,14 @@ func (t *Tracer) AttachSchedMonitor() error {
 	prog := t.ebpfProgs["tracepoint__sched_process_exit"]
 	return t.attachToTracepoint("sched", "sched_process_exit", prog)
 }
+
+func (t *Tracer) AttachAllocationHook() error {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return fmt.Errorf("failed to adjust rlimit: %v", err)
+	}
+	defer restoreRlimit()
+
+	prog := t.ebpfProgs["native_tracer_entry_uprobe"]
+	return t.attachToTracepoint("sdt_ddprof", "allocation", prog)
+}

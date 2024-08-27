@@ -239,3 +239,61 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_php")
+int unwind_php_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  int unwinder = get_next_unwinder_after_interpreter(record);
+  u32 pid = record->trace.pid;
+  PHPProcInfo *phpinfo = bpf_map_lookup_elem(&php_procs, &pid);
+  if (!phpinfo) {
+    DEBUG_PRINT("No PHP introspection data");
+    goto exit;
+  }
+
+  // The section id and bias are zeroes if matched via JIT page mapping.
+  // Otherwise its the native code interpreter range match and these are
+  // set to the native code's values.
+  bool is_jitted = record->state.text_section_id == 0 &&
+    record->state.text_section_bias == 0;
+
+  increment_metric(metricID_UnwindPHPAttempts);
+
+  if (!record->phpUnwindState.zend_execute_data) {
+    // Get executor_globals.current_execute_data
+    if (bpf_probe_read_user(&record->phpUnwindState.zend_execute_data, sizeof(void *),
+                            (void*) phpinfo->current_execute_data)) {
+      DEBUG_PRINT("Failed to read executor_globals.current_execute data (0x%lx)",
+          (unsigned long) phpinfo->current_execute_data);
+      increment_metric(metricID_UnwindPHPErrBadCurrentExecuteData);
+      goto exit;
+    }
+  }
+
+#if defined(__aarch64__)
+  // On ARM we need to adjust the stack pointer if we entered from JIT code
+  // This is only a problem on ARM where the SP/FP are used for unwinding.
+  // This is necessary because:
+  // a) The PHP VM jumps into code by default. This is equivalent to having an inner frame.
+  // b) The PHP VM allocates some space for alignment purposes and saving registers.
+  // c) The amount and alignment of this space can change in hard-to-detect ways.
+  // Given that there's no guarantess that anything pushed to the stack is useful we
+  // simply ignore it. There may be a return address in some modes, but this is hard to detect
+  // consistently.
+  if (is_jitted) {
+      record->state.sp = record->state.fp;
+  }
+#endif
+  
+  DEBUG_PRINT("Building PHP stack (execute_data = 0x%lx)", (unsigned long) record->phpUnwindState.zend_execute_data);
+
+  // Unwind one call stack or unrolled length, and continue
+  unwinder = walk_php_stack(record, phpinfo, is_jitted);
+
+exit:
+  tail_call_uprobe(ctx, unwinder);
+  return -1;
+}

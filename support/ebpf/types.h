@@ -530,6 +530,9 @@ typedef struct Trace {
   s32 kernel_stack_id;
   // The number of frames in the stack.
   u32 stack_len;
+  u64 alloc_addr;
+  u64 alloc_size;
+
   // The frames of the stack trace.
   Frame frames[MAX_FRAME_UNWINDS];
 

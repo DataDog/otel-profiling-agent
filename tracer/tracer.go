@@ -395,7 +395,11 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 		}
 	}
 
-	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers); err != nil {
+	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers, false); err != nil {
+		return nil, nil, fmt.Errorf("failed to load eBPF programs: %v", err)
+	}
+
+	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs_uprobe"], includeTracers, true); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF programs: %v", err)
 	}
 
@@ -472,7 +476,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map) err
 
 // loadUnwinders just satisfies the proof of concept and loads all eBPF programs
 func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, includeTracers config.IncludedTracers) error {
+	tailcallMap *cebpf.Map, includeTracers config.IncludedTracers, uprobe bool) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -553,13 +557,19 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 			enable:           true,
 		},
 	} {
-		if !unwindProg.enable {
+		if !unwindProg.enable || (uprobe && strings.HasPrefix(unwindProg.name, "tracepoint_")) {
 			continue
 		}
 
 		// Load the eBPF program into the kernel. If no error is returned,
 		// the eBPF program can be used/called/triggered from now on.
-		unwinder, err := cebpf.NewProgramWithOptions(coll.Programs[unwindProg.name],
+		progName := unwindProg.name
+		if uprobe {
+			progName = fmt.Sprintf("%s_uprobe", progName)
+		}
+		// fmt.Printf("Loading %s\n", progName)
+		// fmt.Printf("type: %v, attach_type: %v, attach_target: %v\n", coll.Programs[progName].Type, coll.Programs[progName].AttachType, coll.Programs[unwindProg.name].AttachTarget)
+		unwinder, err := cebpf.NewProgramWithOptions(coll.Programs[progName],
 			programOptions)
 		if err != nil {
 			// These errors tend to have hundreds of lines, so we print each line individually.
@@ -567,10 +577,11 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 			for scanner.Scan() {
 				log.Error(scanner.Text())
 			}
-			return fmt.Errorf("failed to load %s", unwindProg.name)
+			fmt.Print(err)
+			return fmt.Errorf("failed to load %s", progName)
 		}
 
-		ebpfProgs[unwindProg.name] = unwinder
+		ebpfProgs[progName] = unwinder
 		fd := uint32(unwinder.FD())
 		if unwindProg.noTailCallTarget {
 			continue
@@ -857,6 +868,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		PID:              util.PID(ptr.pid),
 		TID:              util.TID(ptr.tid),
 		KTime:            util.KTime(ptr.ktime),
+		AllocAddress:     libpf.Address(ptr.alloc_addr),
+		AllocSize:        uint64(ptr.alloc_size),
 	}
 
 	// Trace fields included in the hash:
@@ -867,6 +880,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 	ptr.apm_trace_id = C.ApmTraceID{}
 	ptr.apm_transaction_id = C.ApmSpanID{}
 	ptr.ktime = 0
+	ptr.alloc_addr = 0
+	ptr.alloc_size = 0
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
 	userFrameOffs := 0

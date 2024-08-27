@@ -273,3 +273,61 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_ruby")
+int unwind_ruby_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  int unwinder = get_next_unwinder_after_interpreter(record);
+  ErrorCode error = ERR_OK;
+  u32 pid = record->trace.pid;
+  RubyProcInfo *rubyinfo = bpf_map_lookup_elem(&ruby_procs, &pid);
+  if (!rubyinfo) {
+    DEBUG_PRINT("No Ruby introspection data");
+    error = ERR_RUBY_NO_PROC_INFO;
+    increment_metric(metricID_UnwindRubyErrNoProcInfo);
+    goto exit;
+  }
+
+  increment_metric(metricID_UnwindRubyAttempts);
+
+
+  // Pointer for an address to a rb_execution_context_struct struct.
+  void *current_ctx_addr = NULL;
+
+  if (rubyinfo->version >= 0x30000) {
+    // With Ruby 3.x and its internal change of the execution model, we can no longer
+    // access rb_execution_context_struct directly. Therefore we have to first lookup
+    // ruby_single_main_ractor and get access to the current execution context via
+    // the offset to running_ec.
+
+    void *single_main_ractor = NULL;
+    if (bpf_probe_read_user(&single_main_ractor, sizeof(single_main_ractor),
+                            (void *)rubyinfo->current_ctx_ptr)) {
+      goto exit;
+    }
+
+    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
+                            (void *)(single_main_ractor + rubyinfo->running_ec))) {
+      goto exit;
+    }
+  } else {
+    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
+                            (void *)rubyinfo->current_ctx_ptr)) {
+      goto exit;
+    }
+  }
+
+  if (!current_ctx_addr) {
+    goto exit;
+  }
+
+  error = walk_ruby_stack(record, rubyinfo, current_ctx_addr, &unwinder);
+
+exit:
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  return -1;
+}

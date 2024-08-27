@@ -7,6 +7,7 @@
 
 // References to map definitions in *.ebpf.c.
 extern bpf_map_def progs;
+extern bpf_map_def progs_uprobe;
 extern bpf_map_def per_cpu_records;
 extern bpf_map_def pid_page_to_mapping_info;
 extern bpf_map_def metrics;

@@ -288,3 +288,49 @@ exit:
   DEBUG_PRINT("dotnet: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+SEC("uprobe/unwind_dotnet")
+int unwind_dotnet_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace = &record->trace;
+  u32 pid = trace->pid;
+  DEBUG_PRINT("==== unwind_dotnet %d ====", trace->stack_len);
+
+  int unwinder = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+  DotnetProcInfo *vi = bpf_map_lookup_elem(&dotnet_procs, &pid);
+  if (!vi) {
+    DEBUG_PRINT("dotnet: no DotnetProcInfo for this pid");
+    error = ERR_DOTNET_NO_PROC_INFO;
+    increment_metric(metricID_UnwindDotnetErrNoProcInfo);
+    goto exit;
+  }
+
+  record->ratelimitAction = RATELIMIT_ACTION_FAST;
+  increment_metric(metricID_UnwindDotnetAttempts);
+
+#pragma unroll
+  for (int i = 0; i < DOTNET_FRAMES_PER_PROGRAM; i++) {
+    unwinder = PROG_UNWIND_STOP;
+
+    error = unwind_one_dotnet_frame(record, vi, i == 0);
+    if (error) {
+      break;
+    }
+
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != PROG_UNWIND_DOTNET) {
+      break;
+    }
+  }
+
+exit:
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  DEBUG_PRINT("dotnet: tail call for next frame unwinder (%d) failed", unwinder);
+  return -1;
+}

@@ -801,6 +801,58 @@ int unwind_native(struct pt_regs *ctx) {
   return -1;
 }
 
+SEC("uprobe/unwind_native")
+int unwind_native_uprobe(struct pt_regs *ctx) {
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  Trace *trace = &record->trace;
+  int unwinder;
+  ErrorCode error;
+#pragma unroll
+  for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
+    unwinder = PROG_UNWIND_STOP;
+
+    // Unwind native code
+    u32 frame_idx = trace->stack_len;
+    DEBUG_PRINT("==== unwind_native %d ====", frame_idx);
+    increment_metric(metricID_UnwindNativeAttempts);
+
+    // Push frame first. The PC is valid because a text section mapping was found.
+    DEBUG_PRINT("Pushing %llx %llx to position %u on stack",
+                record->state.text_section_id, record->state.text_section_offset,
+                trace->stack_len);
+    error = push_native(trace, record->state.text_section_id, record->state.text_section_offset,
+        record->state.return_address);
+    if (error) {
+      DEBUG_PRINT("failed to push native frame");
+      break;
+    }
+
+    // Unwind the native frame using stack deltas. Stop if no next frame.
+    bool stop;
+    error = unwind_one_frame(trace->pid, frame_idx, &record->state, &stop);
+    if (error || stop) {
+      break;
+    }
+
+    // Continue unwinding
+    DEBUG_PRINT(" pc: %llx sp: %llx fp: %llx", record->state.pc, record->state.sp, record->state.fp);
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != PROG_UNWIND_NATIVE) {
+      break;
+    }
+  }
+
+  // Tail call needed for recursion, switching to interpreter unwinder, or reporting
+  // trace due to end-of-trace or error. The unwinder program index is set accordingly.
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  DEBUG_PRINT("bpf_tail call failed for %d in unwind_native", unwinder);
+  return -1;
+}
+
 static inline
 int collect_trace(struct pt_regs *ctx) {
   // Get the PID and TGID register.
@@ -859,7 +911,77 @@ exit:
   return -1;
 }
 
+static inline
+int collect_allocation_trace(struct pt_regs *ctx) {
+  // Get the PID and TGID register.
+  u64 id = bpf_get_current_pid_tgid();
+  u64 tid = id & 0xFFFFFFFF;
+  u64 pid = id >> 32;
+
+  if (pid == 0) {
+    return 0;
+  }
+
+  u64 ktime = bpf_ktime_get_ns();
+
+  DEBUG_PRINT("==== do_perf_event ====");
+
+  // The trace is reused on each call to this function so we have to reset the
+  // variables used to maintain state.
+  DEBUG_PRINT("Resetting CPU record");
+  PerCPURecord *record = get_pristine_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace = &record->trace;
+  trace->tid = tid;
+  trace->pid = pid;
+  trace->ktime = ktime;
+  trace->alloc_addr = ctx->si;
+  trace->alloc_size = ctx->dx;
+
+  if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
+    increment_metric(metricID_ErrBPFCurrentComm);
+  }
+
+  // Get the kernel mode stack trace first
+  trace->kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
+  DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
+
+  // Recursive unwind frames
+  int unwinder = PROG_UNWIND_STOP;
+  bool has_usermode_regs = false;
+  ErrorCode error = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
+  if (error || !has_usermode_regs) {
+    goto exit;
+  }
+
+  if (!pid_information_exists(ctx, pid)) {
+    if (report_pid(ctx, pid, RATELIMIT_ACTION_DEFAULT)) {
+      increment_metric(metricID_NumProcNew);
+    }
+    return 0;
+  }
+  error = get_next_unwinder_after_native_frame(record, &unwinder);
+
+exit:
+  record->state.unwind_error = error;
+  tail_call_uprobe(ctx, unwinder);
+  DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
+  return -1;
+}
+
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx) {
   return collect_trace((struct pt_regs*) &ctx->regs);
 }
+
+SEC("uprobe/native_tracer_entry")
+int native_tracer_entry_uprobe(struct pt_regs *ctx) {
+  u64 allocated_size = ctx->dx;
+  u64 addr = ctx->si;
+  printt("allocation_tracer_entry, addr:%llx size:%llx\n", addr, allocated_size);
+  return collect_allocation_trace(ctx);
+} 
+
