@@ -4,6 +4,7 @@ go 1.22.2
 
 require (
 	cloud.google.com/go/compute/metadata v0.3.0
+	github.com/DataDog/zstd v1.5.7-0.20240809173922-01236a179a11
 	github.com/aws/aws-sdk-go-v2/config v1.27.21
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.8
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.1
