@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DataDog/zstd"
 	lru "github.com/elastic/go-freelru"
 	pprofile "github.com/google/pprof/profile"
 	log "github.com/sirupsen/logrus"
@@ -304,9 +305,13 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	}
 
 	// serialize the profile to a buffer and send it out
-	var b bytes.Buffer
-	if err := profile.Write(&b); err != nil {
+	b := new(bytes.Buffer)
+	compressed := zstd.NewWriter(b)
+	if err := profile.WriteUncompressed(compressed); err != nil {
 		return err
+	}
+	if err := compressed.Close(); err != nil {
+		return fmt.Errorf("failed to compress profile: %w", err)
 	}
 
 	if r.saveCPUProfile {
