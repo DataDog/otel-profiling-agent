@@ -38,8 +38,8 @@ func uploadProfiles(ctx context.Context, profiles []profileData, startTime, endT
 		return err
 	}
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("DD-EVP-ORIGIN", profilerName)
-	req.Header.Set("DD-EVP-ORIGIN-VERSION", vc.Version())
+	req.Header.Set("Dd-Evp-Origin", profilerName)
+	req.Header.Set("Dd-Evp-Origin-Version", vc.Version())
 
 	// If you're uploading directly to our intake, add the API key here:
 	// req.Header.Set("DD-API-KEY", "xxxx")

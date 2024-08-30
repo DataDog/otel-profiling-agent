@@ -23,6 +23,10 @@ issues:
     - target
     - virt-tests
     - vm-images
+  exclude-rules:
+    - path: hostmetadata/azure/azure.go
+      linters:
+        - lll
 
 linters:
   enable-all: true

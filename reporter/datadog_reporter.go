@@ -559,6 +559,7 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 	return function
 }
 
+//nolint:gocritic
 func addTraceLabels(labels map[string][]string, k traceAndMetaKey) {
 	if k.comm != "" {
 		labels["thread_name"] = append(labels["thread_name"], k.comm)

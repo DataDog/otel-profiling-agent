@@ -82,7 +82,6 @@ type IMDS struct {
 // Failures (missing keys, etc) are logged and ignored.
 //
 // We extract the Azure metadata according to the information at
-// nolint:lll
 // https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service?tabs=linux#endpoint-categories
 //
 // - 169.254.169.254 is the standard endpoint for the instance metadata service in all clouds.

@@ -701,6 +701,8 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 }
 
 // getSampleAttributes builds a sample-specific list of attributes.
+//
+//nolint:gocritic
 func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey) []uint64 {
 	indices := make([]uint64, 0, 4)
 
