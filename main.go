@@ -186,7 +186,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if err = tracer.ProbeBPFSyscall(); err != nil {
-		log.Errorf(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
+		log.Errorf("Failed to probe eBPF syscall: %v", err)
 		return exitFailure
 	}
 

@@ -62,8 +62,7 @@ jobs:
     - name: Linter
       run: |
         go version
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
-        make lint
+        make lint TARGET_ARCH=amd64
 
   test:
     name: Test
@@ -79,20 +78,6 @@ jobs:
     steps:
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc make llvm clang-16 dwz cmake curl unzip
-    - name: Install Zydis
-      shell: bash
-      run: |
-        cd /tmp
-        git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
-        cd zydis
-        rm -rf build
-        mkdir build
-        cd build
-        cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
-        make -j$(nproc)
-        sudo make install
-        cd zycore
-        sudo make install
     - name: Check out
       uses: actions/checkout@v4
     - name: Set up Go ${{matrix.go}}

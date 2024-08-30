@@ -44,7 +44,7 @@ func fetchStackRecords(t *testing.T) []runtime.StackRecord {
 }
 
 // isSelfOrRuntime returns true if stack is from self or a Go runtime internal stack.
-func isSelfOrRuntime(t *testing.T, stack [32]uintptr, self string) bool {
+func isSelfOrRuntime(t *testing.T, stack *[32]uintptr, self string) bool {
 	t.Helper()
 	isRuntimeOnly := true
 	for _, pc := range stack {
@@ -59,6 +59,7 @@ func isSelfOrRuntime(t *testing.T, stack [32]uintptr, self string) bool {
 			if !strings.HasPrefix(funcName, "runtime.") &&
 				!strings.HasPrefix(funcName, "runtime/") &&
 				!strings.HasPrefix(funcName, "testing.") &&
+				!strings.HasPrefix(funcName, "internal/runtime") &&
 				funcName != "main.main" {
 				isRuntimeOnly = false
 			}
@@ -80,8 +81,8 @@ func checkForGoRoutineLeaks(t *testing.T) {
 	sr := fetchStackRecords(t)
 
 	leakedGoRoutines := make([]int, 0)
-	for i, s := range sr {
-		if isSelfOrRuntime(t, s.Stack0, selfFrame.Func.Name()) {
+	for i := range sr {
+		if isSelfOrRuntime(t, &sr[i].Stack0, selfFrame.Func.Name()) {
 			continue
 		}
 		leakedGoRoutines = append(leakedGoRoutines, i)

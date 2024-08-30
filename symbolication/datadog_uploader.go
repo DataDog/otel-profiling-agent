@@ -313,9 +313,9 @@ func (d *DatadogUploader) buildSymbolUploadRequest(symbolFile *os.File,
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	r.Header.Set("DD-API-KEY", d.ddAPIKey)
-	r.Header.Set("DD-EVP-ORIGIN", "otel-profiling-agent")
-	r.Header.Set("DD-EVP-ORIGIN-VERSION", vc.Version())
+	r.Header.Set("Dd-Api-Key", d.ddAPIKey)
+	r.Header.Set("Dd-Evp-Origin", "otel-profiling-agent")
+	r.Header.Set("Dd-Evp-Origin-Version", vc.Version())
 	r.Header.Set("Content-Type", mw.FormDataContentType())
 	r.Header.Set("Content-Encoding", "gzip")
 	return r, nil

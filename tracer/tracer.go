@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -374,7 +374,7 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 
 	// Replace the place holders for map access in the eBPF programs with
 	// the file descriptors of the loaded maps.
-	// nolint:staticcheck
+	//nolint:staticcheck
 	if err = coll.RewriteMaps(ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
@@ -927,7 +927,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.
 	// Index is the ebpfID, value is the corresponding metricID.
-	// nolint:lll
+	//nolint:lll
 	translateIDs := []metrics.MetricID{
 		C.metricID_UnwindCallInterpreter:                      metrics.IDUnwindCallInterpreter,
 		C.metricID_UnwindErrZeroPC:                            metrics.IDUnwindErrZeroPC,
@@ -1102,7 +1102,7 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 	enableSampling := false
 	var probProfilingStatus = probProfilingDisable
 
-	if rand.Intn(ProbabilisticThresholdMax) < int(threshold) {
+	if rand.UintN(ProbabilisticThresholdMax) < threshold {
 		enableSampling = true
 		probProfilingStatus = probProfilingEnable
 		log.Debugf("Start sampling for next interval (%v)", interval)

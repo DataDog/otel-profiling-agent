@@ -42,6 +42,7 @@ func TestCPUID_ParseOnlineCPUCoreIDs(t *testing.T) {
 func prepareFakeCPUOnlineFile(t *testing.T, content string) *os.File {
 	f, err := os.CreateTemp("", "sys_device_cpu_online")
 	require.NoError(t, err)
+	//nolint:gosec
 	_ = os.WriteFile(f.Name(), []byte(content), os.ModePerm)
 	return f
 }

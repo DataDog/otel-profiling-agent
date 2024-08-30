@@ -57,7 +57,6 @@ func TestGetGoBuildID(t *testing.T) {
 		t.Fatalf("GetGoBuildID failed with error: %s", err)
 	}
 
-	// nolint:lll
 	if buildID !=
 		"tUhrGOwxi48kXlLhYlY3/WlmPekR2qonrFvofssLt/8beXJbt0rDaHhn3I6x8D/IA6Zd8Qc8Rsh_bFKoPVn" {
 		t.Fatalf("Invalid build-id: %s", buildID)

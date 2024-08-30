@@ -80,7 +80,7 @@ func (e EnvironmentType) String() string {
 	case envAzure:
 		return "azure"
 	case envAWS:
-		// nolint: goconst
+		//nolint: goconst
 		return "aws"
 	default:
 		return fmt.Sprintf("unknown environment %d", e)
