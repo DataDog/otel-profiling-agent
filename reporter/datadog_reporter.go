@@ -66,7 +66,7 @@ type DatadogReporter struct {
 	executables *lru.SyncedLRU[libpf.FileID, execInfo]
 
 	// frames maps frame information to its source location.
-	frames *lru.SyncedLRU[libpf.FileID, xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
+	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[map[libpf.TraceHash]traceFramesCounts]
@@ -171,7 +171,8 @@ func (r *DatadogReporter) FrameMetadata(fileID libpf.FileID, addressOrLine libpf
 		functionName:   functionName,
 		filePath:       filePath,
 	}
-	r.frames.Add(fileID, xsync.NewRWMutex(v))
+	mu := xsync.NewRWMutex(v)
+	r.frames.Add(fileID, &mu)
 }
 
 // ReportHostMetadata enqueues host metadata.
@@ -225,7 +226,7 @@ func StartDatadog(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	}
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
