@@ -469,10 +469,6 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 	}
 
 	execPath, _ := r.execPathes.Get(traceKey.pid)
-	baseExec := path.Base(execPath)
-	if baseExec == "." || baseExec == "/" {
-		baseExec = execPath // avoids kernel being transformed in .
-	}
 	// Check if the last frame is a kernel frame.
 	if len(traceInfo.frameTypes) > 0 &&
 		traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
@@ -480,6 +476,7 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 		// location with the kernel as the function name.
 		execPath = "kernel"
 	}
+	baseExec := path.Base(execPath)
 
 	if execPath != "" {
 		loc := createPProfLocation(profile, 0)
@@ -489,15 +486,11 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 	}
 
 	sample.Label = make(map[string][]string)
-	addTraceLabels(sample.Label, traceKey, baseExec)
+	var timestamps []uint64 = nil
 	if r.timeline {
-		timestamps := make([]string, 0, len(traceInfo.timestamps))
-		for _, ts := range traceInfo.timestamps {
-			timestamps = append(timestamps, strconv.FormatUint(ts, 10))
-		}
-		// Assign all timestamps as a single label entry
-		sample.Label["end_timestamp_ns"] = timestamps
+		timestamps = traceInfo.timestamps
 	}
+	addTraceLabels(sample.Label, traceKey, baseExec, timestamps)
 	count := len(traceInfo.timestamps)
 	sample.Value = append(sample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
 	profile.Sample = append(profile.Sample, sample)
@@ -513,9 +506,6 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	}
 	r.traceEvents.WUnlock(&traceEvents)
 	numSamples := len(samples)
-	if r.timeline {
-		numSamples *= 4
-	}
 
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
@@ -587,7 +577,8 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 }
 
 //nolint:gocritic
-func addTraceLabels(labels map[string][]string, k traceAndMetaKey, baseExec string) {
+func addTraceLabels(labels map[string][]string, k traceAndMetaKey,
+	baseExec string, timestamps []uint64) {
 	if k.comm != "" {
 		labels["thread_name"] = append(labels["thread_name"], k.comm)
 	}
@@ -621,6 +612,15 @@ func addTraceLabels(labels map[string][]string, k traceAndMetaKey, baseExec stri
 
 	if baseExec != "" {
 		labels["process_name"] = append(labels["process_name"], baseExec)
+	}
+
+	if timestamps != nil && len(timestamps) > 0 {
+		timestampStrs := make([]string, 0, len(timestamps))
+		for _, ts := range timestamps {
+			timestampStrs = append(timestampStrs, strconv.FormatUint(ts, 10))
+		}
+		// Assign all timestamps as a single label entry
+		labels["end_timestamp_ns"] = timestampStrs
 	}
 }
 
