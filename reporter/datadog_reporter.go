@@ -364,8 +364,9 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	return err
 }
 
-func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofile.Profile, traceKey traceAndMetaKey,
-	traceInfo *traceFramesCounts, fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
+func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofile.Profile,
+	traceKey *traceAndMetaKey, traceInfo *traceFramesCounts,
+	fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
 	frameIDtoFunction map[libpf.FrameID]*pprofile.Function,
 	funcMap map[funcInfo]*pprofile.Function) {
 	const unknownStr = "UNKNOWN"
@@ -486,7 +487,7 @@ func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofi
 	}
 
 	sample.Label = make(map[string][]string)
-	var timestamps []uint64 = nil
+	var timestamps []uint64
 	if r.timeline {
 		timestamps = traceInfo.timestamps
 	}
@@ -525,7 +526,6 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	totalSampleCount := 0
 
 	for traceKey, traceInfo := range samples {
-
 		for _, ts := range traceInfo.timestamps {
 			if ts < startTS || startTS == 0 {
 				startTS = ts
@@ -537,7 +537,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		}
 		sample := &pprofile.Sample{}
 		count := len(traceInfo.timestamps)
-		r.processSample(sample, profile, traceKey, traceInfo, fileIDtoMapping,
+		r.processSample(sample, profile, &traceKey, traceInfo, fileIDtoMapping,
 			frameIDtoFunction, funcMap)
 		totalSampleCount += count
 	}
@@ -576,13 +576,11 @@ func createPprofFunctionEntry(funcMap map[funcInfo]*pprofile.Function,
 	return function
 }
 
-//nolint:gocritic
-func addTraceLabels(labels map[string][]string, k traceAndMetaKey,
+func addTraceLabels(labels map[string][]string, k *traceAndMetaKey,
 	baseExec string, timestamps []uint64) {
 	if k.comm != "" {
 		labels["thread_name"] = append(labels["thread_name"], k.comm)
 	}
-
 	if k.podName != "" {
 		labels["pod_name"] = append(labels["pod_name"], k.podName)
 	}
@@ -614,7 +612,7 @@ func addTraceLabels(labels map[string][]string, k traceAndMetaKey,
 		labels["process_name"] = append(labels["process_name"], baseExec)
 	}
 
-	if timestamps != nil && len(timestamps) > 0 {
+	if len(timestamps) > 0 {
 		timestampStrs := make([]string, 0, len(timestamps))
 		for _, ts := range timestamps {
 			timestampStrs = append(timestampStrs, strconv.FormatUint(ts, 10))
