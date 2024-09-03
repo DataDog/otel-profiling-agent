@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// nolint:lll
+//nolint:lll
 const fakeAzureAnswer = `{
   "compute": {
     "azEnvironment": "AzurePublicCloud",

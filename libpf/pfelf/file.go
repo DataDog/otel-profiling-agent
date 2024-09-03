@@ -529,7 +529,7 @@ func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
 	for i := range f.Sections {
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
-		if section.Type == elf.SHT_RELA { // nolint:misspell
+		if section.Type == elf.SHT_RELA {
 			if err = f.insertTLSDescriptorsForSection(descs, section); err != nil {
 				return nil, err
 			}
@@ -542,10 +542,10 @@ func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
 func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 	relaSection *Section) error {
 	if relaSection.Link > uint32(len(f.Sections)) {
-		return errors.New("rela section link is out-of-bounds") // nolint:misspell
+		return errors.New("rela section link is out-of-bounds")
 	}
 	if relaSection.Link == 0 {
-		return errors.New("rela section link is empty") // nolint:misspell
+		return errors.New("rela section link is empty")
 	}
 	if relaSection.Size > maxBytesLargeSection {
 		return fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
@@ -579,7 +579,7 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 
 	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
 	for i := 0; i < len(relaData); i += relaSz {
-		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i])) // nolint:misspell
+		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
 
 		ty := rela.Info & 0xffff
 		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
@@ -708,20 +708,16 @@ func (f *File) CRC32() (int32, error) {
 func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// First load as much as possible from the disk
 	if uint64(off) < ph.Filesz {
-		max := len(p)
-		if int64(max) > int64(ph.Filesz)-off {
-			max = int(int64(ph.Filesz) - off)
-		}
-
-		n, err = ph.elfReader.ReadAt(p[0:max], int64(ph.Off)+off)
+		end := int(min(int64(len(p)), int64(ph.Filesz)-off))
+		n, err = ph.elfReader.ReadAt(p[0:end], int64(ph.Off)+off)
 		if n == 0 && errors.Is(err, syscall.EFAULT) {
 			// Read zeroes from sparse file holes
-			for i := range p[0:max] {
+			for i := range p[0:end] {
 				p[i] = 0
 			}
-			n = max
+			n = end
 		}
-		if n != max || err != nil {
+		if n != end || err != nil {
 			return n, err
 		}
 		off += int64(n)
@@ -730,14 +726,11 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// The gap between Filesz and Memsz is allocated by dynamic loader as
 	// anonymous pages, and zero initialized. Read zeroes from this area.
 	if n < len(p) && uint64(off) < ph.Memsz {
-		max := len(p) - n
-		if int64(max) > int64(ph.Memsz)-off {
-			max = int(int64(ph.Memsz) - off)
-		}
-		for i := range p[n : n+max] {
+		end := int(min(int64(len(p)-n), int64(ph.Memsz)-off))
+		for i := range p[n : n+end] {
 			p[i] = 0
 		}
-		n += max
+		n += end
 	}
 
 	if n != len(p) {
@@ -845,7 +838,7 @@ func calcSysvHash(s libpf.SymbolName) uint32 {
 
 // LookupSymbol searches for a given symbol in the ELF
 func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
-	if f.gnuHash.addr != 0 { //nolint: gocritic
+	if f.gnuHash.addr != 0 {
 		// Standard DT_GNU_HASH lookup code follows. Please check the DT_GNU_HASH
 		// blog link (on top of this file) for details how this works.
 		hdr := &f.gnuHash.header

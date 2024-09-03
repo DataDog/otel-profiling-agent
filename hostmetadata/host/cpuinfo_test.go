@@ -59,7 +59,7 @@ func TestReadCPUInfo(t *testing.T) {
 			assert.NotEmpty(t, cps)
 			i, err := strconv.Atoi(cps)
 			require.NoErrorf(t, err, "%v must be parseable as a number", cps)
-			assert.Greater(t, i, 0)
+			assert.Positive(t, i)
 		},
 		"OnlineCPUs": func(t *testing.T) {
 			assert.Contains(t, info[key(keyCPUOnline)], 0)

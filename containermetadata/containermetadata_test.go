@@ -362,7 +362,7 @@ func BenchmarkGetKubernetesPodMetadata(b *testing.B) {
 
 			file, err := os.CreateTemp("", "test_containermetadata_cgroup*")
 			require.NoError(b, err)
-			defer os.Remove(file.Name()) // nolint: gocritic
+			defer os.Remove(file.Name()) //nolint: gocritic
 
 			_, err = fmt.Fprintf(file,
 				"0::/kubepods/besteffort/poda9c80282-3f6b-4d5b-84d5-a137a6668011/"+

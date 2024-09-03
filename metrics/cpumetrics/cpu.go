@@ -223,11 +223,11 @@ func getCPUUsage() (pAvgCPU uint16, err error) {
 	// Calculate the maximum possible value for the elapsed time (duration).
 	// nCPUs*userHZ: The max. number of ticks per second.
 	// duration / time.Second: Time elapsed in seconds.
-	max := float64(nCPUs*userHZ) * (float64(duration) / float64(time.Second))
+	maximum := float64(nCPUs*userHZ) * (float64(duration) / float64(time.Second))
 
 	// Calculate the % value of the CPU usage with rounding.
-	if max > 0 {
-		pAvgCPU = uint16(float64(load*100)/max + 0.5)
+	if maximum > 0 {
+		pAvgCPU = uint16(float64(load*100)/maximum + 0.5)
 		if pAvgCPU > 100 {
 			pAvgCPU = 100
 		}
