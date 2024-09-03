@@ -2,7 +2,6 @@ package symbolication
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DataDog/zstd"
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
@@ -268,9 +268,9 @@ func (d *DatadogUploader) buildSymbolUploadRequest(symbolFile *os.File,
 	e *executableMetadata) (*http.Request, error) {
 	b := new(bytes.Buffer)
 
-	gzipped := gzip.NewWriter(b)
+	compressed := zstd.NewWriter(b)
 
-	mw := multipart.NewWriter(gzipped)
+	mw := multipart.NewWriter(compressed)
 
 	// Copy the symbol file into the multipart writer
 	filePart, err := mw.CreateFormFile("elf_symbol_file", "elf_symbol_file")
@@ -297,15 +297,15 @@ func (d *DatadogUploader) buildSymbolUploadRequest(symbolFile *os.File,
 		return nil, fmt.Errorf("failed to write JSON metadata: %w", err)
 	}
 
-	// Close the multipart writer then the gzip writer
+	// Close the multipart writer then the zstd writer
 	err = mw.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	err = gzipped.Close()
+	err = compressed.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+		return nil, fmt.Errorf("failed to close zstd writer: %w", err)
 	}
 
 	r, err := http.NewRequest(http.MethodPost, d.intakeURL, b)
@@ -317,7 +317,7 @@ func (d *DatadogUploader) buildSymbolUploadRequest(symbolFile *os.File,
 	r.Header.Set("Dd-Evp-Origin", "otel-profiling-agent")
 	r.Header.Set("Dd-Evp-Origin-Version", vc.Version())
 	r.Header.Set("Content-Type", mw.FormDataContentType())
-	r.Header.Set("Content-Encoding", "gzip")
+	r.Header.Set("Content-Encoding", "zstd")
 	return r, nil
 }
 
