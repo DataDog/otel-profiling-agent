@@ -111,11 +111,7 @@ func (d *DatadogUploader) HandleExecutable(elfRef *pfelf.Reference, fileID libpf
 		return
 	}
 
-	e, err := newExecutableMetadata(fileName, ef, fileID)
-	if err != nil {
-		log.Debugf("Skipping symbol upload for executable %s: %v", fileName, err)
-		return
-	}
+	e := newExecutableMetadata(fileName, ef, fileID)
 
 	d.uploadCache.Add(fileID, struct{}{})
 	// TODO:
@@ -162,21 +158,21 @@ type executableMetadata struct {
 }
 
 func newExecutableMetadata(fileName string, elf *pfelf.File,
-	fileID libpf.FileID) (*executableMetadata, error) {
+	fileID libpf.FileID) *executableMetadata {
 	isGolang := elf.IsGolang()
 
 	buildID, err := elf.GetBuildID()
-	// Some Go executables don't have a GNU build ID, so we don't want to fail
-	// if we can't get it
-	if err != nil && !isGolang {
-		return nil, fmt.Errorf("failed to get build id: %w", err)
+	if err != nil {
+		log.Debugf(
+			"Unable to get GNU build ID for executable %s: %s", fileName, err)
 	}
 
 	goBuildID := ""
 	if isGolang {
 		goBuildID, err = elf.GetGoBuildID()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get go build id: %w", err)
+			log.Debugf(
+				"Unable to get Go build ID for executable %s: %s", fileName, err)
 		}
 	}
 
@@ -191,7 +187,7 @@ func newExecutableMetadata(fileName string, elf *pfelf.File,
 		SymbolSource:  "debug_info",
 		FileName:      filepath.Base(fileName),
 		filePath:      fileName,
-	}, nil
+	}
 }
 
 func (e *executableMetadata) String() string {

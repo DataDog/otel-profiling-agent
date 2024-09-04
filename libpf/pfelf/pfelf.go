@@ -237,13 +237,18 @@ func GetGoBuildID(elfFile *elf.File) (string, error) {
 }
 
 // getGoBuildIDFromNotes returns the Go build ID from an ELF notes section data.
+//
+//nolint:lll
 func getGoBuildIDFromNotes(notes []byte) (string, error) {
 	// 0x4 is the "Go Build ID" type. Not sure where this is standardized.
 	buildID, found, err := getNoteString(notes, "Go", 0x4)
 	if err != nil {
 		return "", fmt.Errorf("could not determine BuildID: %v", err)
 	}
-	if !found {
+	// When building Go binaries, Bazel explicitly sets their build ID to "redacted"
+	// see https://github.com/bazelbuild/rules_go/blob/199d8e4827f87d382a85febd0148c1b42fa949cc/go/private/actions/link.bzl#L174.
+	// In that case, we don't want to associate the build ID with the binary in the mapping.
+	if !found || buildID == "redacted" {
 		return "", ErrNoBuildID
 	}
 	return buildID, nil
