@@ -364,139 +364,6 @@ func (r *DatadogReporter) reportProfile(ctx context.Context) error {
 	return err
 }
 
-func (r *DatadogReporter) processSample(sample *pprofile.Sample, profile *pprofile.Profile,
-	traceKey *traceAndMetaKey, traceInfo *traceFramesCounts,
-	fileIDtoMapping map[libpf.FileID]*pprofile.Mapping,
-	frameIDtoFunction map[libpf.FrameID]*pprofile.Function,
-	funcMap map[funcInfo]*pprofile.Function) {
-	const unknownStr = "UNKNOWN"
-	// Walk every frame of the trace.
-	for i := range traceInfo.frameTypes {
-		loc := createPProfLocation(profile, uint64(traceInfo.linenos[i]))
-
-		switch frameKind := traceInfo.frameTypes[i]; frameKind {
-		case libpf.NativeFrame:
-			// As native frames are resolved in the backend, we use Mapping to
-			// report these frames.
-
-			if tmpMapping, exists := fileIDtoMapping[traceInfo.files[i]]; exists {
-				loc.Mapping = tmpMapping
-			} else {
-				executionInfo, exists := r.executables.Get(traceInfo.files[i])
-
-				// Next step: Select a proper default value,
-				// if the name of the executable is not known yet.
-				var fileName = unknownStr
-				var buildID = traceInfo.files[i].StringNoQuotes()
-				if exists {
-					fileName = executionInfo.fileName
-					if executionInfo.buildID != "" {
-						buildID = executionInfo.buildID
-					}
-				}
-
-				tmpMapping := createPprofMapping(profile, uint64(traceInfo.linenos[i]),
-					fileName, buildID)
-				fileIDtoMapping[traceInfo.files[i]] = tmpMapping
-				loc.Mapping = tmpMapping
-			}
-			line := pprofile.Line{Function: createPprofFunctionEntry(funcMap, profile, "",
-				loc.Mapping.File)}
-			loc.Line = append(loc.Line, line)
-		case libpf.KernelFrame:
-			// Reconstruct frameID
-			frameID := libpf.NewFrameID(traceInfo.files[i], traceInfo.linenos[i])
-			// Store Kernel frame information as Line message:
-			line := pprofile.Line{}
-
-			if tmpFunction, exists := frameIDtoFunction[frameID]; exists {
-				line.Function = tmpFunction
-			} else {
-				symbol, exists := r.fallbackSymbols.Get(frameID)
-				if !exists {
-					// TODO: choose a proper default value if the kernel symbol was not
-					// reported yet.
-					symbol = unknownStr
-				}
-				line.Function = createPprofFunctionEntry(
-					funcMap, profile, symbol, "")
-			}
-			loc.Line = append(loc.Line, line)
-
-			// To be compliant with the protocol generate a dummy mapping entry.
-			loc.Mapping = getDummyMapping(fileIDtoMapping, profile,
-				traceInfo.files[i])
-
-		case libpf.AbortFrame:
-			// Next step: Figure out how the OTLP protocol
-			// could handle artificial frames, like AbortFrame,
-			// that are not originate from a native or interpreted
-			// program.
-		default:
-			// Store interpreted frame information as Line message:
-			line := pprofile.Line{}
-
-			fileIDInfoLock, exists := r.frames.Get(traceInfo.files[i])
-			if !exists {
-				// At this point, we do not have enough information for the frame.
-				// Therefore, we report a dummy entry and use the interpreter as filename.
-				line.Function = createPprofFunctionEntry(funcMap, profile,
-					"UNREPORTED", frameKind.String())
-			} else {
-				fileIDInfo := fileIDInfoLock.RLock()
-				si, exists := (*fileIDInfo)[traceInfo.linenos[i]]
-				if !exists {
-					// At this point, we do not have enough information for the frame.
-					// Therefore, we report a dummy entry and use the interpreter as filename.
-					// To differentiate this case with the case where no information about
-					// the file ID is available at all, we use a different name for reported
-					// function.
-					line.Function = createPprofFunctionEntry(funcMap, profile,
-						"UNRESOLVED", frameKind.String())
-				} else {
-					line.Line = int64(si.lineNumber)
-
-					line.Function = createPprofFunctionEntry(funcMap, profile,
-						si.functionName, si.filePath)
-				}
-				fileIDInfoLock.RUnlock(&fileIDInfo)
-			}
-			loc.Line = append(loc.Line, line)
-
-			// To be compliant with the protocol generate a dummy mapping entry.
-			loc.Mapping = getDummyMapping(fileIDtoMapping, profile, traceInfo.files[i])
-		}
-		sample.Location = append(sample.Location, loc)
-	}
-
-	execPath, _ := r.execPathes.Get(traceKey.pid)
-	// Check if the last frame is a kernel frame.
-	if len(traceInfo.frameTypes) > 0 &&
-		traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
-		// If the last frame is a kernel frame, we need to add a dummy
-		// location with the kernel as the function name.
-		execPath = "kernel"
-	}
-	baseExec := path.Base(execPath)
-
-	if execPath != "" {
-		loc := createPProfLocation(profile, 0)
-		m := createPprofFunctionEntry(funcMap, profile, baseExec, execPath)
-		loc.Line = append(loc.Line, pprofile.Line{Function: m})
-		sample.Location = append(sample.Location, loc)
-	}
-
-	sample.Label = make(map[string][]string)
-	var timestamps []uint64
-	if r.timeline {
-		timestamps = traceInfo.timestamps
-	}
-	addTraceLabels(sample.Label, traceKey, baseExec, timestamps)
-	count := len(traceInfo.timestamps)
-	sample.Value = append(sample.Value, int64(count), int64(count)*int64(r.samplingPeriod))
-	profile.Sample = append(profile.Sample, sample)
-}
-
 // getPprofProfile returns a pprof profile containing all collected samples up to this moment.
 func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	startTS uint64, endTS uint64) {
@@ -506,7 +373,10 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		delete(*traceEvents, key)
 	}
 	r.traceEvents.WUnlock(&traceEvents)
+
 	numSamples := len(samples)
+
+	const unknownStr = "UNKNOWN"
 
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
@@ -526,6 +396,8 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 	totalSampleCount := 0
 
 	for traceKey, traceInfo := range samples {
+		sample := &pprofile.Sample{}
+
 		for _, ts := range traceInfo.timestamps {
 			if ts < startTS || startTS == 0 {
 				startTS = ts
@@ -535,11 +407,135 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 				endTS = ts
 			}
 		}
-		sample := &pprofile.Sample{}
-		count := len(traceInfo.timestamps)
-		r.processSample(sample, profile, &traceKey, traceInfo, fileIDtoMapping,
-			frameIDtoFunction, funcMap)
-		totalSampleCount += count
+
+		// Walk every frame of the trace.
+		for i := range traceInfo.frameTypes {
+			loc := createPProfLocation(profile, uint64(traceInfo.linenos[i]))
+
+			switch frameKind := traceInfo.frameTypes[i]; frameKind {
+			case libpf.NativeFrame:
+				// As native frames are resolved in the backend, we use Mapping to
+				// report these frames.
+
+				if tmpMapping, exists := fileIDtoMapping[traceInfo.files[i]]; exists {
+					loc.Mapping = tmpMapping
+				} else {
+					executionInfo, exists := r.executables.Get(traceInfo.files[i])
+
+					// Next step: Select a proper default value,
+					// if the name of the executable is not known yet.
+					var fileName = unknownStr
+					var buildID = traceInfo.files[i].StringNoQuotes()
+					if exists {
+						fileName = executionInfo.fileName
+						if executionInfo.buildID != "" {
+							buildID = executionInfo.buildID
+						}
+					}
+
+					tmpMapping := createPprofMapping(profile, uint64(traceInfo.linenos[i]),
+						fileName, buildID)
+					fileIDtoMapping[traceInfo.files[i]] = tmpMapping
+					loc.Mapping = tmpMapping
+				}
+				line := pprofile.Line{Function: createPprofFunctionEntry(funcMap, profile, "",
+					loc.Mapping.File)}
+				loc.Line = append(loc.Line, line)
+			case libpf.KernelFrame:
+				// Reconstruct frameID
+				frameID := libpf.NewFrameID(traceInfo.files[i], traceInfo.linenos[i])
+				// Store Kernel frame information as Line message:
+				line := pprofile.Line{}
+
+				if tmpFunction, exists := frameIDtoFunction[frameID]; exists {
+					line.Function = tmpFunction
+				} else {
+					symbol, exists := r.fallbackSymbols.Get(frameID)
+					if !exists {
+						// TODO: choose a proper default value if the kernel symbol was not
+						// reported yet.
+						symbol = unknownStr
+					}
+					line.Function = createPprofFunctionEntry(
+						funcMap, profile, symbol, "")
+				}
+				loc.Line = append(loc.Line, line)
+
+				// To be compliant with the protocol generate a dummy mapping entry.
+				loc.Mapping = getDummyMapping(fileIDtoMapping, profile,
+					traceInfo.files[i])
+
+			case libpf.AbortFrame:
+				// Next step: Figure out how the OTLP protocol
+				// could handle artificial frames, like AbortFrame,
+				// that are not originate from a native or interpreted
+				// program.
+			default:
+				// Store interpreted frame information as Line message:
+				line := pprofile.Line{}
+
+				fileIDInfoLock, exists := r.frames.Get(traceInfo.files[i])
+				if !exists {
+					// At this point, we do not have enough information for the frame.
+					// Therefore, we report a dummy entry and use the interpreter as filename.
+					line.Function = createPprofFunctionEntry(funcMap, profile,
+						"UNREPORTED", frameKind.String())
+				} else {
+					fileIDInfo := fileIDInfoLock.RLock()
+					si, exists := (*fileIDInfo)[traceInfo.linenos[i]]
+					if !exists {
+						// At this point, we do not have enough information for the frame.
+						// Therefore, we report a dummy entry and use the interpreter as filename.
+						// To differentiate this case with the case where no information about
+						// the file ID is available at all, we use a different name for reported
+						// function.
+						line.Function = createPprofFunctionEntry(funcMap, profile,
+							"UNRESOLVED", frameKind.String())
+					} else {
+						line.Line = int64(si.lineNumber)
+
+						line.Function = createPprofFunctionEntry(funcMap, profile,
+							si.functionName, si.filePath)
+					}
+					fileIDInfoLock.RUnlock(&fileIDInfo)
+				}
+				loc.Line = append(loc.Line, line)
+
+				// To be compliant with the protocol generate a dummy mapping entry.
+				loc.Mapping = getDummyMapping(fileIDtoMapping, profile, traceInfo.files[i])
+			}
+			sample.Location = append(sample.Location, loc)
+		}
+
+		execPath, _ := r.execPathes.Get(traceKey.pid)
+
+		// Check if the last frame is a kernel frame.
+		if len(traceInfo.frameTypes) > 0 &&
+			traceInfo.frameTypes[len(traceInfo.frameTypes)-1] == libpf.KernelFrame {
+			// If the last frame is a kernel frame, we need to add a dummy
+			// location with the kernel as the function name.
+			execPath = "kernel"
+		}
+		baseExec := path.Base(execPath)
+
+		if execPath != "" {
+			loc := createPProfLocation(profile, 0)
+			m := createPprofFunctionEntry(funcMap, profile, baseExec, execPath)
+			loc.Line = append(loc.Line, pprofile.Line{Function: m})
+			sample.Location = append(sample.Location, loc)
+		}
+
+		sample.Label = make(map[string][]string)
+		var timestamps []uint64
+		if r.timeline {
+			timestamps = traceInfo.timestamps
+		}
+		addTraceLabels(sample.Label, &traceKey, baseExec, timestamps)
+
+		count := int64(len(traceInfo.timestamps))
+		sample.Value = append(sample.Value, count, count*int64(r.samplingPeriod))
+		profile.Sample = append(profile.Sample, sample)
+		totalSampleCount += len(traceInfo.timestamps)
 	}
 	log.Infof("Reporting pprof profile with %d samples from %v to %v",
 		totalSampleCount, startTS, endTS)
