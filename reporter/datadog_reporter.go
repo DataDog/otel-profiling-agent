@@ -530,7 +530,7 @@ func (r *DatadogReporter) getPprofProfile() (profile *pprofile.Profile,
 		if r.timeline {
 			timestamps = traceInfo.timestamps
 		}
-		addTraceLabels(sample.Label, &traceKey, baseExec, timestamps)
+		addTraceLabels(sample.Label, &traceKey, baseExec, timestamps) //nolint:gomemory
 
 		count := int64(len(traceInfo.timestamps))
 		sample.Value = append(sample.Value, count, count*int64(r.samplingPeriod))
