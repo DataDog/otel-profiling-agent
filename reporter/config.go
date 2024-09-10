@@ -51,6 +51,9 @@ type Config struct {
 
 	SaveCPUProfile bool
 
+	// Whether to include timestamps on samples for the timeline feature
+	Timeline bool
+
 	Times Times
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.

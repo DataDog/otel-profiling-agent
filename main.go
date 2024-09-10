@@ -315,6 +315,7 @@ func mainWithExitCode() exitCode {
 		FallbackSymbolsMaxQueue: 1024,
 		DisableTLS:              argDisableTLS,
 		MaxGRPCRetries:          5,
+		Timeline:                argTimeline,
 		SamplesPerSecond:        conf.SamplesPerSecond,
 		SaveCPUProfile:          argSaveCPUProfile,
 		Times:                   times,

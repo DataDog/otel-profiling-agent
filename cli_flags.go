@@ -99,6 +99,7 @@ var (
 	argProbabilisticInterval  time.Duration
 	argPprofAddr              string
 	argSaveCPUProfile         bool
+	argTimeline               bool
 
 	// "internal" flag variables.
 	// Flag variables that are configured in "internal" builds will have to be assigned
@@ -161,6 +162,7 @@ func parseArgs() error {
 		saveCPUProfileHelp)
 	fs.IntVar(&argSamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
+	fs.BoolVar(&argTimeline, "timeline", false, "Enable timeline feature.")
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
