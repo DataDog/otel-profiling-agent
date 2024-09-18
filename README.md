@@ -1,111 +1,39 @@
 # Datadog Fork
 
-This is an experimental fork of [elastic/otel-profiling-agent](https://github.com/elastic/otel-profiling-agent). The upstream project is in the process of being [donated](https://github.com/open-telemetry/community/issues/1918) to the OpenTelemetry project. Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of offically supported Datadog profilers.
+This is an experimental fork of [elastic/otel-profiling-agent](https://github.com/elastic/otel-profiling-agent). The upstream project is in the process of being [donated](https://github.com/open-telemetry/community/issues/1918) to the OpenTelemetry project. Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of officially supported Datadog profilers.
 
 Our fork adds support for sending profiling data to the Datadog backend via the Datadog Agent. We are active members of the OpenTelemetry Profiling SIG that is working on the OpenTelemetry profiling signal. However, the signal is still under active development, so this fork can be used by Datadog users until we release our support for directly ingesting the data using OTLP.
 
 ## Requirements
 
-The otel-profiling-agent requires the following Linux kernel versions:
+The otel-profiling-agent only runs on Linux, and requires the following Linux kernel versions:
 * Kernel version 4.19 or newer for amd64/x86_64
 * Kernel version 5.5 or newer for arm64/aarch64
 
-## Installation
+## Running the profiler
 
-Download pre-built amd64 and arm64 binaries for our [latest release](https://github.com/DataDog/otel-profiling-agent/releases/latest).
+If the host is running workloads inside containers, it is recommended to run the profiler inside a container as well. A container image is available at https://github.com/DataDog/otel-profiling-agent/pkgs/container/otel-profiling-agent/.
 
-Alternatively, you can build the agent from source. The following instructions assume you have docker installed.
+If you're using Kubernetes, please follow the documentation here: [Running in Kubernetes](doc/running-in-kubernetes.md). 
 
-<details>
-<summary>Manual build instructions</summary>
-<br />
+If you're directly using Docker, please follow the documentation here: [Running in Docker](doc/running-in-docker.md).
 
-To build the agent, you can use the following commands:
+If you're not using a container runtime, please check this section to run the profiler directly on the host: [Running on the host](doc/running-on-host.md).
 
-```
-make docker-image
-make agent
-```
-
-This will create a `otel-profiling-agent` binary in the current directory.
-
-</details>
-
-## Run
-
-To run the agent, you need to make sure that debugfs is mounted. If it's not, you can run:
-
-```
-sudo mount -t debugfs none /sys/kernel/debug
-```
-
-After that, you can start the agent as shown below (make sure you run it as root):
-
-```
-sudo otel-profiling-agent -tags 'service:myservice' -collection-agent "http://localhost:8126" -reporter-interval 60s -samples-per-second 20
-```
-
-For this to work you need to run a Datadog agent that listens for APM traffic at `localhost:8126`. If your agent is reachable under a different address, you can modify the `-collection-agent` parameter accordingly.
-
-## Running inside a container
-
-#### Requirements
-
-When running the agent in a container, you need to ensure the following conditions are met:
-* The container is running in privileged mode.
-* The container has the `SYS_ADMIN` capability.
-* The container has Host PID enabled (and procMount: "Unmasked").
-* The host's debugfs filesystem is mounted to the container (in read-only mode).
-* The agent is running as root inside the container.
-
-#### Container name resolution
-
-To be able to resolve container names, the agent needs to be able to access the underlying container runtime (in read-only mode). The agent supports Docker and containerd.
-
-To enable this feature, you need to mount the container runtime socket to the agent container in read-only mode (`/var/run/docker.sock` for Docker, `/run/containerd/containerd.sock` for containerd).
-
-#### Pod name resolution
-
-To be able to resolve pod names in Kubernetes, the agent needs to be able to:
-
-1. Get the `KUBERNETS_NODE_NAME` environment variable:
-```yaml
-env:
-  - name: KUBERNETES_NODE_NAME
-    valueFrom:
-      fieldRef:
-        fieldPath: spec.nodeName
-```
-
-2. Access the underlying Kubernetes API server. This is usually done through a ClusterRole and ClusterRoleBinding with the following permissions:
-```yaml
-rules:
-  - verbs:
-      - get
-      - watch
-      - list
-    resources:
-      - nodes
-      - pods
-    apiGroups:
-      - ""
-```
-
-## Configuration
+## Configuring the profiler
 
 ### Local symbol upload (Experimental)
 
-For compiled languages (C/C++/Rust/Go), the profiling-agent can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binaries).
+For compiled languages (C/C++/Rust/Go), the profiler can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binaries).
 
 To enable local symbol upload:
 1. Set the `DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD` environment variable to `true`.
 2. Provide a Datadog API key through the `DD_API_KEY` environment variable.
 3. Set the `DD_SITE` environment variable to [your Datadog site](https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site) (e.g. `datadoghq.com`).
 
-
 ## Development
 
-A `docker-compose.yml` file is provided to help run the agent in a container for local development.
+A `docker-compose.yml` file is provided to help run the profiler in a container for local development.
 
 First, create a `.env` file with the following content:
 
@@ -118,13 +46,13 @@ OTEL_PROFILING_AGENT_REPORTER_INTERVAL=10s # optional, defaults to 60s
 DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD=true # optional, defaults to false
 ```
 
-Then, you can run the agent with the following command:
+Then, you can run the profiler with the following command:
 
 ```
 docker-compose up
 ```
 
-The agent will submit profiling data to the Datadog Agent using the value of OTEL_PROFILING_AGENT_SERVICE as the service name.
+The profiler will submit profiling data to the Datadog Agent using the value of OTEL_PROFILING_AGENT_SERVICE as the service name.
 
 
 The contents of the original upstream README are below.
