@@ -29,7 +29,7 @@ For compiled languages (C/C++/Rust/Go), the profiler can upload local symbols (w
 To enable local symbol upload:
 1. Set the `DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD` environment variable to `true`.
 2. Provide a Datadog API key through the `DD_API_KEY` environment variable.
-3. Set the `DD_SITE` environment variable to [your Datadog site](https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site) (e.g. `datadoghq.com`).
+3. Set the `DD_SITE` environment variable to [your Datadog site](https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site) (e.g. `datadoghq.com`, `datadoghq.eu`, `us5.datadoghq.com`, ...).
 
 ## Development
 
