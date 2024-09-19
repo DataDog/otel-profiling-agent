@@ -4,7 +4,7 @@ This document is a guide to running the profiler in a Docker container.
 
 ## Prerequisites
 
-The datadog-agent must be running on the host and configured to collect APM data (this is enabled by default in the agent, unless you explicitly disabled it). See https://docs.datadoghq.com/containers/docker/apm/ for more information.
+The datadog-agent must be running and configured to collect APM data (this is enabled by default in the agent, unless you explicitly disabled it). See https://docs.datadoghq.com/containers/docker/apm/ for more information.
 
 For the purposes of this guide, we assume that the datadog agent is accessible at a specific address from the docker container: `http://<agent_address>:8126`.
 

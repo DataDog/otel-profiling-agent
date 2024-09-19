@@ -1,6 +1,6 @@
 # Datadog Fork
 
-This is an experimental fork of [elastic/otel-profiling-agent](https://github.com/elastic/otel-profiling-agent). The upstream project is in the process of being [donated](https://github.com/open-telemetry/community/issues/1918) to the OpenTelemetry project. Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of officially supported Datadog profilers.
+This is an experimental fork of [open-telemetry/opentelemetry-ebpf-profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler). Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of officially supported Datadog profilers.
 
 Our fork adds support for sending profiling data to the Datadog backend via the Datadog Agent. We are active members of the OpenTelemetry Profiling SIG that is working on the OpenTelemetry profiling signal. However, the signal is still under active development, so this fork can be used by Datadog users until we release our support for directly ingesting the data using OTLP.
 
@@ -25,6 +25,8 @@ If you're not using a container runtime, please check this section to run the pr
 ### Local symbol upload (Experimental)
 
 For compiled languages (C/C++/Rust/Go), the profiler can upload local symbols (when available) to Datadog for symbolication. Symbols need to be available locally (unstripped binaries).
+
+This feature requires being part of our private beta program for the OpenTelemetry profiler. Please reach out to Datadog support to get access.
 
 To enable local symbol upload:
 1. Set the `DD_EXPERIMENTAL_LOCAL_SYMBOL_UPLOAD` environment variable to `true`.
