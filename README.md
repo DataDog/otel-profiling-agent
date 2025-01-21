@@ -1,3 +1,10 @@
+# DEPRECATED AND MOVED TO [dd-otel-host-profiler](https://github.com/DataDog/dd-otel-host-profiler)
+
+This repository has been deprecated and moved to [dd-otel-host-profiler](https://github.com/DataDog/dd-otel-host-profiler). 
+
+The contents of the original README are below.
+
+---
 # Datadog Fork
 
 This is an experimental fork of [open-telemetry/opentelemetry-ebpf-profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler). Please refer to our [documentation](https://docs.datadoghq.com/profiler/) for a list of officially supported Datadog profilers.
